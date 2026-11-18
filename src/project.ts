@@ -1,5 +1,5 @@
 import { A1, DEFAULT_BASEMAP, DEFAULT_BOUNDARY, DEFAULT_LAYER, DEFAULT_LAYOUT, clampFrame } from './model';
-import type { BasemapId, BasemapStyle, BoundaryStyle, LayerStyle, Layout, NormalizedFrame, OutputSpec } from './model';
+import type { BasemapId, BasemapStyle, BoundaryStyle, LayerAsset, LayerStyle, Layout, NormalizedFrame, OutputSpec } from './model';
 import { BASEMAPS } from './map/basemap';
 
 export interface ProjectSettings {
@@ -10,11 +10,10 @@ export interface ProjectSettings {
   output: OutputSpec;
 }
 
-export interface ProjectLayer {
+export interface ProjectLayer extends Partial<LayerAsset> {
   id: string;
   name: string;
   style: LayerStyle;
-  src?: string;
 }
 export interface ProjectFile extends ProjectSettings {
   schemaVersion: 1;
@@ -103,7 +102,10 @@ export function readProject(value: unknown): ProjectFile {
         }));
     }
     const src = typeof item.src === 'string' ? item.src : undefined;
-    return [{ id: item.id.slice(0, 180), name: item.name.slice(0, 180), style, src }];
+    const filter = item.where;
+    const where = isObject(filter) && typeof filter.field === 'string' && typeof filter.equals === 'string'
+      ? { field: filter.field, equals: filter.equals } : undefined;
+    return [{ id: item.id.slice(0, 180), name: item.name.slice(0, 180), style, src, where }];
   });
   const layout = patch(DEFAULT_LAYOUT, value.layout);
   if (isObject(value.layout)) {

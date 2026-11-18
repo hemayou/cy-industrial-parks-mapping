@@ -16,7 +16,7 @@ import { composeStyle } from './map/compose';
 import { readGeoJson } from './data/importer';
 import type { ImportOptions, ImportResult } from './data/importer';
 import { readProject } from './project';
-import type { ProjectFile } from './project';
+import type { ProjectFile, ProjectLayer } from './project';
 
 type Tab = 'base' | 'layers' | 'layout';
 const openedMap = findBasemap('open-light');
@@ -27,6 +27,38 @@ async function assetGeoJson(path: string, label: string) {
   const response = await fetch(path);
   if (!response.ok) throw new Error(`${label}读取失败。`);
   return readGeoJson(await response.text(), label).data;
+}
+
+async function configuredLayer(layer: ProjectLayer): Promise<DataLayer> {
+  const url = new URL(layer.src!, window.location.origin);
+  if (url.origin !== window.location.origin || !/\.(geojson|json)$/i.test(url.pathname)) {
+    throw new Error('配置内的图层须为同站点的 GeoJSON 文件。');
+  }
+  const source = await assetGeoJson(url.pathname, layer.name);
+  const where = layer.where;
+  const features = where
+    ? source.features.filter(feature => feature.properties?.[where.field] === where.equals)
+    : source.features;
+  if (!features.length) throw new Error(`${layer.name}缺少匹配的要素。`);
+  return {
+    ...defaultLayer({ ...source, features }, layer.name, layer.id || crypto.randomUUID(), layer.id.startsWith('demo-')),
+    style: layer.style,
+    asset: { src: url.pathname, where },
+  };
+}
+
+async function initialLayers(): Promise<{ layers: DataLayer[]; managed: boolean }> {
+  const response = await fetch('/workspace-data/project.json');
+  if (response.status === 404 || (response.ok && response.headers.get('content-type')?.includes('text/html'))) {
+    return { layers: await exampleLayers(), managed: false };
+  }
+  if (!response.ok) throw new Error('默认园区图层配置加载失败。');
+  const config = readProject(await response.json());
+  const managed = config.layers.filter(layer => layer.src);
+  if (!managed.length || managed.some(layer => !layer.src!.startsWith('/workspace-data/'))) {
+    throw new Error('默认园区图层配置缺少有效的加载路径。');
+  }
+  return { layers: await Promise.all(managed.map(configuredLayer)), managed: true };
 }
 
 async function exampleLayers() {
@@ -57,6 +89,7 @@ export function App() {
   const [boundary, setBoundary] = useState<Collection | null>(null);
   const [boundaryName, setBoundaryName] = useState('朝阳区开放参考区界 © OpenStreetMap');
   const [layers, setLayers] = useState<DataLayer[]>([]);
+  const [managed, setManaged] = useState(false);
   const [activeId, setActiveId] = useState('demo-parks');
   const [layout, setLayout] = useState<Layout>({ ...DEFAULT_LAYOUT });
   const [output, setOutput] = useState<OutputSpec>({ ...A1 });
@@ -73,15 +106,16 @@ export function App() {
   const importDialog = useRef<HTMLDialogElement>(null);
   const worker = useRef<Worker | null>(null);
   const fileJob = useRef(0);
-  const demo = useRef(true);
+  const allowInitialLayers = useRef(true);
 
   useEffect(() => {
     assetGeoJson(defaultBoundaryPath, '朝阳区区界').then(data => {
       setBoundary(existing => existing ?? data);
     }).catch(error => setProblems(previous => [...previous, error.message]));
 
-    exampleLayers().then(datasets => {
-      if (demo.current) setLayers(current => current.length ? current : datasets);
+    initialLayers().then(initial => {
+      setManaged(initial.managed);
+      if (allowInitialLayers.current) setLayers(current => current.length ? current : initial.layers);
     }).catch(error => setProblems(previous => [...previous, error.message]));
 
     return () => worker.current?.terminate();
@@ -202,7 +236,7 @@ export function App() {
         return;
       }
       if (imported.length) {
-        demo.current = false;
+        allowInitialLayers.current = false;
         const additional = imported.map(item => defaultLayer(item.data, item.name));
         setLayers(value => [...value.filter(item => !item.example), ...additional]);
         setActiveId(additional[0].id);
@@ -218,22 +252,23 @@ export function App() {
     currentWorker.postMessage({ files, options });
   }
 
-  async function loadExample() {
+  async function loadInitialLayers() {
     try {
-      demo.current = true;
-      const datasets = await exampleLayers();
-      setLayers(current => current.length ? current : datasets);
-      setActiveId('demo-parks');
+      allowInitialLayers.current = true;
+      const initial = await initialLayers();
+      setManaged(initial.managed);
+      setLayers(current => current.length ? current : initial.layers);
+      setActiveId(initial.layers[0]?.id ?? '');
     } catch (error) {
-      setProblems([error instanceof Error ? error.message : '示例加载失败。']);
+      setProblems([error instanceof Error ? error.message : '默认图层加载失败。']);
     }
   }
 
   function saveProject() {
     const project: ProjectFile = {
       schemaVersion: 1, basemap: selected.id, basemapStyle: baseStyle, boundaryStyle, layout, output,
-      layers: layers.map(({ id, name, style, example }) => ({
-        id, name, style, ...(example ? { src: id === 'demo-parks' ? '/data/example-parks.geojson' : '/data/example-areas.geojson' } : {}),
+      layers: layers.map(({ id, name, style, example, asset }) => ({
+        id, name, style, ...(asset ?? (example ? { src: id === 'demo-parks' ? '/data/example-parks.geojson' : '/data/example-areas.geojson' } : {})),
       })),
     };
     downloadBlob(new Blob([JSON.stringify(project, null, 2) + '\n'], { type: 'application/json' }), '出图配置.json');
@@ -258,15 +293,10 @@ export function App() {
         if (current) {
           effects.set(current.id, layer.style);
         } else if (layer.src) {
-          const url = new URL(layer.src, window.location.origin);
-          if (url.origin !== window.location.origin || !/\.(geojson|json)$/i.test(url.pathname)) {
-            throw new Error('配置内的图层须为同站点的 GeoJSON 文件。');
-          }
-          const dataset = defaultLayer(await assetGeoJson(url.pathname, layer.name), layer.name, layer.id || crypto.randomUUID(), layer.id.startsWith('demo-'));
-          additions.push({ ...dataset, style: layer.style });
+          additions.push(await configuredLayer(layer));
         } else missing.push(layer.name);
       }
-      demo.current = false;
+      allowInitialLayers.current = false;
       setSelected(findBasemap(config.basemap));
       setBaseStyle(config.basemapStyle);
       setBoundaryStyle(config.boundaryStyle);
@@ -322,10 +352,10 @@ export function App() {
               setRetry(index => index + 1);
             }} onSelect={chooseBasemap} onStyle={setBaseStyle} onBoundary={setBoundaryStyle}
             onRetry={() => setRetry(index => index + 1)} onImportBoundary={() => openImport('boundary')} />}
-          {tab === 'layers' && <LayerPanel layers={layers} active={active} importing={importing}
-            onImport={() => openImport('layers')} onExample={() => void loadExample()} onSelect={setActiveId}
+          {tab === 'layers' && <LayerPanel layers={layers} active={active} importing={importing} managed={managed}
+            onImport={() => openImport('layers')} onRestore={() => void loadInitialLayers()} onSelect={setActiveId}
             onUpdate={value => setLayers(current => current.map(item => item.id === value.id ? value : item))}
-            onRemove={id => { demo.current = false; setLayers(current => current.filter(layer => layer.id !== id)); }} />}
+            onRemove={id => { allowInitialLayers.current = false; setLayers(current => current.filter(layer => layer.id !== id)); }} />}
           {tab === 'layout' && <LayoutPanel layout={layout} layers={layers} output={output} onLayout={setLayout} onOutput={setOutput} />}
         </div>
       </aside>

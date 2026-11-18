@@ -47,6 +47,11 @@ export interface LayerStyle {
   categoryOrder: string[];
 }
 
+export interface LayerAsset {
+  src: string;
+  where?: { field: string; equals: string };
+}
+
 export interface DataLayer {
   id: string;
   name: string;
@@ -55,6 +60,7 @@ export interface DataLayer {
   kinds: { point: boolean; line: boolean; area: boolean };
   style: LayerStyle;
   example?: boolean;
+  asset?: LayerAsset;
 }
 
 export interface BasemapStyle {

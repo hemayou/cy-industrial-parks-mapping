@@ -25,12 +25,12 @@ function MarkerControls({ point, onChange }: { point: PointStyle; onChange: (val
 }
 
 interface Props {
-  layers: DataLayer[]; active: DataLayer | undefined; importing: boolean;
-  onImport: () => void; onExample: () => void; onSelect: (id: string) => void;
+  layers: DataLayer[]; active: DataLayer | undefined; importing: boolean; managed: boolean;
+  onImport: () => void; onRestore: () => void; onSelect: (id: string) => void;
   onUpdate: (layer: DataLayer) => void; onRemove: (id: string) => void;
 }
 
-export function LayerPanel({ layers, active, importing, onImport, onExample, onSelect, onUpdate, onRemove }: Props) {
+export function LayerPanel({ layers, active, importing, managed, onImport, onRestore, onSelect, onUpdate, onRemove }: Props) {
   const change = (patch: Partial<DataLayer['style']>) => active && onUpdate({ ...active, style: { ...active.style, ...patch } });
   const fieldChoices = [{ value: '', label: '选择字段' }, ...active?.fields.map(field => ({ value: field, label: field })) ?? []];
   const rows = active?.kinds.point && active.style.categoryField ? categoryRows(active) : [];
@@ -48,7 +48,7 @@ export function LayerPanel({ layers, active, importing, onImport, onExample, onS
         <span className="import-icon"><FileUp size={20} /></span>
         <span><strong>{importing ? '正在读取文件' : '导入本地矢量文件'}</strong><small>GeoJSON、Shapefile、GeoPackage</small></span>
       </button>
-      {!layers.length && <button type="button" className="text-button" onClick={onExample}>载入示例图层</button>}
+      {!layers.length && <button type="button" className="text-button" onClick={onRestore}>{managed ? '载入默认园区图层' : '载入示例图层'}</button>}
       <div className="dataset-list">
         {layers.map(layer =>
           <div key={layer.id} className={`dataset ${layer.id === active?.id ? 'active' : ''}`}>

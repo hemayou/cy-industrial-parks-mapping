@@ -1,6 +1,6 @@
 # 朝阳园产业园区地图
 
-在朝阳区全域画幅上叠加园区点、区块和区界，配置专题样式，并按印刷尺寸或指定像素导出 PNG／JPG。浏览器读取本地矢量文件，项目业务资料保存在使用者设备上。
+在朝阳区全域画幅上叠加园区点、区块和区界，配置专题样式，并按印刷尺寸或指定像素导出 PNG／JPG。浏览器在本地读取使用者导入的矢量文件。项目可另行配置受口令保护的默认图层。
 
 ## 本地运行
 
@@ -9,7 +9,7 @@ npm ci
 npm run dev
 ```
 
-Vite 默认监听本机 5173 端口。工作台打开时载入开放预览底图、参考区界和明确标记的示例专题。导入业务图层后，工作台自动移除示例，保留使用者已经导入的其他图层。
+Vite 默认监听本机 5173 端口。工作台打开时载入开放预览底图和参考区界。通用代码使用明确标记的示例专题，配置了默认业务图层的工作台会载入相应的园区数据。导入业务图层后，工作台自动移除示例，保留使用者已经导入的其他图层。
 
 ## 导入和成图
 
@@ -44,5 +44,7 @@ Esri 请求简体中文地名。各供应商的地名字段经过汉字和标点
 ## Cloudflare Workers
 
 `npm run build` 生成 `dist/`。部署配置让 Worker 先校验口令会话，再提供工作页和静态资源。部署时需在 Cloudflare 配置 `WORKSPACE_PASSCODE` 与独立的 `WORKSPACE_SESSION_KEY`。后者使用至少 32 字符的随机值。首次部署可使用 Wrangler 的 `--secrets-file` 指定保存在 Git 之外的临时秘密配置文件。 [Workers Secrets](https://developers.cloudflare.com/workers/configuration/secrets/) · [静态资源路由](https://developers.cloudflare.com/workers/static-assets/routing/worker-script/)
+
+工作台从 `public/workspace-data/project.json` 读取可选的默认项目配置。该目录在 Git 中忽略，构建时作为静态资源提供，由 Cloudflare Worker 统一校验口令会话。图层可通过 `where` 指定字段和文本值，复用同一份 GeoJSON 形成多个可控图层。
 
 项目源码采用 MIT 许可。参考区界、在线切片与字体分别沿用原许可。思源黑体和思源宋体的 SIL OFL 许可随构建产物一并提供。
