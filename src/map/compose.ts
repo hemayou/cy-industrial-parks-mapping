@@ -6,6 +6,9 @@ import { mapFontFaces } from './fonts';
 import { markerId } from './markers';
 import { formatPointLabel, pointLabelLayout } from './pointLabels';
 import { tiandituLabelLayer } from './tianditu';
+import { clipPolygons } from './labelClip';
+import type { ClipPolygons } from './labelClip';
+import { overlaySourceId } from './parkFeatures';
 
 export function lineDash(line: LineStyle) {
   if (line === 'dashed') return [3, 2];
@@ -47,6 +50,22 @@ export interface PlotOptions {
   boundary: Collection | null;
   boundaryStyle: BoundaryStyle;
   layout: Layout;
+  annotationPadding: number;
+}
+
+export interface PlotScene {
+  style: StyleSpecification;
+  annotations?: { style: StyleSpecification; polygons: ClipPolygons; padding: number };
+  foreground?: StyleSpecification;
+}
+
+function transparentPass(style: StyleSpecification, layers: LayerSpecification[]): StyleSpecification {
+  const usedSources = new Set(layers.flatMap(layer => 'source' in layer ? [layer.source] : []));
+  return {
+    version: 8, layers,
+    sources: Object.fromEntries(Object.entries(style.sources).filter(([id]) => usedSources.has(id))),
+    'font-faces': style['font-faces'],
+  };
 }
 
 export function activeLegendLayer(overlays: DataLayer[], layout: Layout) {
@@ -105,12 +124,12 @@ function layerSources(overlays: DataLayer[], numberedLayerId: string | undefined
         };
       }),
     };
-    sources[`overlay-${layer.id}`] = { type: 'geojson', data, maxzoom: 17 };
+    sources[overlaySourceId(layer.id)] = { type: 'geojson', data, maxzoom: 17, generateId: true };
   }
   return sources;
 }
 
-export function composeStyle({ base, overlays, boundary, boundaryStyle, layout }: PlotOptions): StyleSpecification {
+export function composeStyle({ base, overlays, boundary, boundaryStyle, layout, annotationPadding }: PlotOptions): PlotScene {
   const legend = activeLegendLayer(overlays, layout);
   const numbered = layout.legendMode === 'numbered' ? legend?.id : undefined;
   const sources = { ...base.sources, ...layerSources(overlays, numbered) };
@@ -118,7 +137,7 @@ export function composeStyle({ base, overlays, boundary, boundaryStyle, layout }
   const symbols: LayerSpecification[] = [];
   for (const layer of overlays) {
     if (!layer.style.visible) continue;
-    const id = `overlay-${layer.id}`;
+    const id = overlaySourceId(layer.id);
     const { area, labelField, text } = layer.style;
     const dash = lineDash(area.line);
     const linePaint = { 'line-color': area.stroke, 'line-width': area.width, ...(dash ? { 'line-dasharray': dash } : {}) };
@@ -180,5 +199,15 @@ export function composeStyle({ base, overlays, boundary, boundaryStyle, layout }
   const isBaseText = (layer: LayerSpecification) => layer.type === 'symbol' || layer.id === tiandituLabelLayer;
   const baseShapes = base.layers.filter(layer => !isBaseText(layer));
   const baseText = base.layers.filter(isBaseText);
-  return { ...base, sources, 'font-faces': mapFontFaces(), layers: [...baseShapes, ...shapes, ...baseText, ...symbols] };
+  const style = { ...base, sources, 'font-faces': mapFontFaces(), layers: [...baseShapes, ...shapes] };
+  const polygons = annotationPadding > 0 && boundary ? clipPolygons(boundary) : [];
+  const visibleLabels = baseText.filter(layer => layer.layout?.visibility !== 'none');
+  if (polygons.length && visibleLabels.length) {
+    return {
+      style,
+      annotations: { style: transparentPass(style, visibleLabels), polygons, padding: annotationPadding },
+      ...(symbols.length ? { foreground: transparentPass(style, symbols) } : {}),
+    };
+  }
+  return { style: { ...style, layers: [...style.layers, ...baseText, ...symbols] } };
 }

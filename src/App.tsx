@@ -10,7 +10,7 @@ import { ExportDialog, downloadBlob } from './ExportDialog';
 import { Field, Select } from './controls';
 import { A1, DEFAULT_BASEMAP, DEFAULT_BOUNDARY, DEFAULT_LAYOUT, DISTRICT_FALLBACK, defaultLayer, extent } from './model';
 import type { BasemapStyle, BoundaryStyle, Collection, DataLayer, Layout, OutputSpec } from './model';
-import { attributionText, EMPTY_STYLE, fetchBasemap, findBasemap, providerCredential, providerName, styleBasemap } from './map/basemap';
+import { attributionText, BasemapRequestError, EMPTY_STYLE, fetchBasemap, findBasemap, providerCredential, providerName, styleBasemap } from './map/basemap';
 import type { CatalogStyle, ProviderKeys } from './map/basemap';
 import { composeStyle } from './map/compose';
 import { readGeoJson } from './data/importer';
@@ -166,10 +166,11 @@ export function App() {
         setLoad('ready');
         setProblems([]);
       }
-    }).catch(() => {
+    }).catch(error => {
       if (!cancellation.signal.aborted) {
         setLoad('failed');
-        setProblems([`${providerName[selected.provider]} 底图连接失败。请核对网络及密钥权限。`]);
+        setProblems([error instanceof BasemapRequestError ? error.message
+          : `${providerName[selected.provider]} 底图连接失败。请核对网络及密钥权限。`]);
       }
     }).finally(() => window.clearTimeout(timeout));
     return () => {
@@ -186,8 +187,11 @@ export function App() {
   const bounds = useMemo(() => boundary ? extent(boundary) ?? DISTRICT_FALLBACK : DISTRICT_FALLBACK, [boundary]);
   const example = layers.some(layer => layer.example && layer.style.visible);
   const adjustedBase = useMemo(() => styleBasemap(loaded.raw, loaded.entry, baseStyle), [loaded, baseStyle]);
-  const style = useMemo(() => composeStyle({ base: adjustedBase, overlays: layers, boundary, boundaryStyle, layout }),
-    [adjustedBase, layers, boundary, boundaryStyle, layout.legendLayer, layout.legendMode]);
+  const labelSize = loaded.entry.provider === 'tianditu' ? 0 : baseStyle.text.size;
+  const annotationPadding = baseStyle.clipLabelsToBoundary ? Math.max(28, Math.round(labelSize * 1.5)) : 0;
+  const scene = useMemo(() => composeStyle({
+    base: adjustedBase, overlays: layers, boundary, boundaryStyle, layout, annotationPadding,
+  }), [adjustedBase, layers, boundary, boundaryStyle, layout.legendLayer, layout.legendMode, annotationPadding]);
   const attribution = useMemo(() => [
     ...attributionText(loaded.raw),
     ...(boundaryStyle.visible && boundary ? [boundaryName] : []),
@@ -347,6 +351,10 @@ export function App() {
     : load === 'key' && selected.provider !== 'open' ? `请填写 ${providerCredential[selected.provider]}`
     : load === 'failed' || tileFailed ? '底图连接待重试' : `${providerName[loaded.entry.provider]} · ${loaded.entry.name}`;
 
+  const mapNotice = load === 'key' && selected.provider === 'esri'
+    ? 'Esri 尚未配置 API key。请在底图凭据中填写具备 Basemap Styles 权限的 key。'
+    : load === 'failed' || tileFailed ? '底图连接失败。可在底图面板重试或切换样式。' : undefined;
+
   return <div className="app-shell">
     <header className="topbar">
       <div className="brand">
@@ -371,11 +379,14 @@ export function App() {
             <Icon size={17} strokeWidth={1.75} />{label}</button>)}
         </nav>
         <div className="panel">
-          {tab === 'base' && <BasemapPanel current={selected} raw={loaded.raw} style={baseStyle} boundary={boundaryStyle}
+          {tab === 'base' && <BasemapPanel current={selected} raw={loaded.raw} style={baseStyle} boundary={boundaryStyle} hasBoundary={Boolean(boundary)}
             keys={keys} manualKeys={manualKeys} onKeys={value => {
               setManualKeys({ esri: value.esri.trim(), carto: value.carto.trim(), tianditu: value.tianditu.trim() });
               setRetry(index => index + 1);
-            }} onSelect={chooseBasemap} onStyle={setBaseStyle} onBoundary={setBoundaryStyle}
+            }} onSelect={chooseBasemap} onStyle={value => {
+              if (value.clipLabelsToBoundary !== baseStyle.clipLabelsToBoundary) setTileFailed(false);
+              setBaseStyle(value);
+            }} onBoundary={setBoundaryStyle}
             onRetry={() => setRetry(index => index + 1)} onImportBoundary={() => openImport('boundary')} />}
           {tab === 'layers' && <LayerPanel layers={layers} active={active} importing={importing} managed={managed}
             onImport={() => openImport('layers')} onRestore={() => void loadInitialLayers()} onSelect={setActiveId}
@@ -387,7 +398,7 @@ export function App() {
           {tab === 'layout' && <LayoutPanel layout={layout} layers={layers} output={output} onLayout={setLayout} onOutput={setOutput} />}
         </div>
       </aside>
-      <MapCanvas style={style} bounds={bounds} blocked={load === 'failed' || tileFailed} status={status}
+      <MapCanvas scene={scene} bounds={bounds} layers={layers} notice={mapNotice} status={status}
         example={example} onFailure={() => setTileFailed(true)} />
     </div>
     {(problems.length > 0 || notices) && <div className={`toast ${problems.length ? 'problem' : ''}`} role="status">
@@ -411,6 +422,6 @@ export function App() {
     <input ref={fileField} type="file" aria-label="矢量文件" hidden multiple
       accept=".geojson,.json,.zip,.shp,.shx,.dbf,.prj,.cpg,.gpkg" onChange={importFiles} />
     <input ref={configField} type="file" aria-label="出图配置文件" hidden accept=".json" onChange={event => void applyProject(event)} />
-    {modal && <ExportDialog job={{ style, bounds, layers, layout, output, attribution }} onOutput={setOutput} onLayout={setLayout} onClose={() => setModal(false)} />}
+    {modal && <ExportDialog job={{ scene, bounds, layers, layout, output, attribution }} onOutput={setOutput} onLayout={setLayout} onClose={() => setModal(false)} />}
   </div>;
 }

@@ -68,6 +68,8 @@ function addKey(value: string, relativeTo: URL, entry: CatalogStyle, keys: Provi
   return url.toString().replace(/%7B/gi, '{').replace(/%7D/gi, '}');
 }
 
+export class BasemapRequestError extends Error {}
+
 export async function fetchBasemap(entry: CatalogStyle, keys: ProviderKeys, signal: AbortSignal): Promise<StyleSpecification> {
   if (entry.provider !== 'open' && !keys[entry.provider]) {
     throw new Error(`请在底图凭据中填写 ${providerCredential[entry.provider]}。`);
@@ -77,7 +79,15 @@ export async function fetchBasemap(entry: CatalogStyle, keys: ProviderKeys, sign
   const response = await fetch(url, { signal, credentials: 'omit' });
   const style = await response.json().catch(() => null);
   if (!response.ok || !style || style.error || style.version !== 8 || !Array.isArray(style.layers) || !style.sources) {
-    throw new Error(`${providerName[entry.provider]} 底图连接失败。请核对网络、密钥权限及域名限制。`);
+    if (entry.provider === 'esri') {
+      const code = style?.error?.code;
+      if (code === 499) throw new BasemapRequestError('Esri 499。服务没有收到可用的 API key。');
+      if (code === 498) throw new BasemapRequestError('Esri 498。API key 无效或已过期。');
+      if (response.status === 403 || code === 403) {
+        throw new BasemapRequestError('Esri 403。请核对 API key 的 Basemap Styles 权限和来源域名。');
+      }
+    }
+    throw new BasemapRequestError(`${providerName[entry.provider]} 底图连接失败。请核对网络、密钥权限及域名限制。`);
   }
   const output = style as StyleSpecification;
   // Labels and fonts are replaced in the local style. Keep only vector tiles.
@@ -144,7 +154,10 @@ export function baseLayerGroup(layer: LayerSpecification): BasemapGroup {
   return 'other';
 }
 
-const chineseKeys = ['name:zh-Hans', 'name:zh-CN', '_name_zh-cn', '_name_zh_CN', '_name_zh', 'name:zh', 'name_zh', 'name_zh_cn', '_name_local'];
+const chineseKeys = [
+  'name:zh-Hans', 'name:zh-CN', 'name_zh_hans', '_name_zh_s', '_name_zh-cn', '_name_zh_CN',
+  '_name_zh', 'name:zh', 'name_zh', 'name_zh_cn', '_name_local',
+];
 const digitAndPunctuation = '0123456789０１２３４５６７８９ .·、，。－-（）()《》：／/　';
 const maxLabelLength = 28;
 function han(character: unknown): unknown[] {

@@ -36,11 +36,11 @@ export function Color({ value, onChange, label }: { value: string; onChange: (va
   </label>;
 }
 
-export function Toggle({ checked, onChange, children }: {
-  checked: boolean; onChange: (checked: boolean) => void; children: ReactNode;
+export function Toggle({ checked, onChange, children, disabled }: {
+  checked: boolean; onChange: (checked: boolean) => void; children: ReactNode; disabled?: boolean;
 }) {
   return <label className="toggle">
-    <span>{children}</span><input type="checkbox" role="switch" checked={checked} onChange={event => onChange(event.currentTarget.checked)} />
+    <span>{children}</span><input type="checkbox" role="switch" checked={checked} disabled={disabled} onChange={event => onChange(event.currentTarget.checked)} />
   </label>;
 }
 

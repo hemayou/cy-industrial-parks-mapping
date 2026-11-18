@@ -74,6 +74,7 @@ export interface DataLayer {
 
 export interface BasemapStyle {
   labels: boolean;
+  clipLabelsToBoundary: boolean;
   minor: boolean;
   text: TextStyle;
   groups: Partial<Record<BasemapGroup, boolean>>;
@@ -152,7 +153,7 @@ export const DEFAULT_LAYER: LayerStyle = {
   categories: {}, categoryOrder: [],
 };
 export const DEFAULT_BASEMAP: BasemapStyle = {
-  labels: true, minor: false, text: { ...DEFAULT_TEXT, size: 17, color: '#273745', haloWidth: 1.6 },
+  labels: true, clipLabelsToBoundary: false, minor: false, text: { ...DEFAULT_TEXT, size: 17, color: '#273745', haloWidth: 1.6 },
   groups: { shops: false, buildings: false }, layerVisibility: {}, labelDensity: {}, layerDensity: {},
   roadColor: '', roadColorMinor: '',
 };

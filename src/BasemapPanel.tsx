@@ -7,7 +7,7 @@ import type { CatalogStyle, ProviderKeys } from './map/basemap';
 import { BoundaryControls, Color, Field, Section, Select, TextControls, Toggle } from './controls';
 
 interface Props {
-  current: CatalogStyle; raw: StyleSpecification; style: BasemapStyle; boundary: BoundaryStyle;
+  current: CatalogStyle; raw: StyleSpecification; style: BasemapStyle; boundary: BoundaryStyle; hasBoundary: boolean;
   keys: ProviderKeys; manualKeys: ProviderKeys; onKeys: (keys: ProviderKeys) => void; onSelect: (entry: CatalogStyle) => void;
   onStyle: (style: BasemapStyle) => void; onBoundary: (style: BoundaryStyle) => void;
   onRetry: () => void; onImportBoundary: () => void;
@@ -22,7 +22,7 @@ function DensitySlider({ label, value, onChange }: { label: string; value: numbe
 }
 
 export function BasemapPanel(props: Props) {
-  const { current, raw, style, boundary, keys, manualKeys, onKeys, onSelect, onStyle, onBoundary, onRetry } = props;
+  const { current, raw, style, boundary, hasBoundary, keys, manualKeys, onKeys, onSelect, onStyle, onBoundary, onRetry } = props;
   const [draft, setDraft] = useState(manualKeys);
   const [credentials, setCredentials] = useState(false);
   const [advanced, setAdvanced] = useState<BasemapGroup>('roads');
@@ -71,6 +71,7 @@ export function BasemapPanel(props: Props) {
         <KeyRound size={15} /> 底图凭据 <ChevronDown size={13} />
       </button>
       {credentials && <form className="credentials" onSubmit={event => { event.preventDefault(); onKeys(draft); }}>
+        {current.provider === 'esri' && !keys.esri && <p className="layer-hint">Esri 需要带 Basemap Styles 权限的 API key。</p>}
         <Field label="Esri API key"><input type="password" value={draft.esri} autoComplete="off"
           placeholder={keys.esri ? '工作台已配置' : '输入 Esri API key'}
           onChange={event => setDraft({ ...draft, esri: event.currentTarget.value })} /></Field>
@@ -83,6 +84,11 @@ export function BasemapPanel(props: Props) {
         <div className="button-row"><button className="button secondary" type="submit">应用凭据</button>
           <button type="button" className="button quiet" onClick={onRetry}><RotateCcw size={14} /> 重试连接</button></div>
       </form>}
+    </Section>
+    <Section title="注记范围" compact>
+      <Toggle checked={style.clipLabelsToBoundary} disabled={!hasBoundary}
+        onChange={clipLabelsToBoundary => patch({ clipLabelsToBoundary })}>底图注记裁切到朝阳区</Toggle>
+      {style.clipLabelsToBoundary && <p className="layer-hint">区界附近预留注记宽度，保留沿界地名。</p>}
     </Section>
     {current.provider === 'tianditu' ? <Section title="天地图注记">
       <Toggle checked={style.labels} onChange={labels => patch({ labels })}>显示中文注记</Toggle>

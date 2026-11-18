@@ -253,12 +253,9 @@ export async function renderSheetFrames(
 }
 
 export function paintSheet(
-  context: CanvasRenderingContext2D, width: number, height: number,
-  plan: SheetPlan, layout: Layout, render: HTMLCanvasElement, deferFrames = false,
+  context: CanvasRenderingContext2D, height: number,
+  plan: SheetPlan, layout: Layout, deferFrames = false,
 ) {
-  context.fillStyle = layout.paperColor;
-  context.fillRect(0, 0, width, height);
-  context.drawImage(render, plan.map.x, plan.map.y, plan.map.width, plan.map.height);
   context.strokeStyle = '#8d9ba5';
   context.lineWidth = 1;
   context.strokeRect(plan.map.x, plan.map.y, plan.map.width, plan.map.height);

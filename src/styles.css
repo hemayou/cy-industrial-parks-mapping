@@ -172,13 +172,50 @@ summary { cursor: pointer; font-weight: 700; }
 }
 .map-workspace { flex: 1; min-width: 0; min-height: 0; position: relative; overflow: hidden; background: #e7ebea; }
 .map-canvas { position: absolute; inset: 0 0 32px; }
-.map-heading { display: flex; position: absolute; inset: 17px auto auto 17px; align-items: center; gap: 6px; flex-wrap: wrap; }
-.map-heading > div, .sample-chip {
+.map-overlay-pass, .map-overlay-pass .maplibregl-canvas-container { pointer-events: none; }
+.clipped-annotation-pass { clip-path: inset(100%); }
+.map-heading { position: absolute; top: 17px; left: 17px; width: min(340px, calc(100% - 76px)); display: grid; gap: 7px; z-index: 5; pointer-events: none; }
+.map-scope { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+.map-scope > span {
   display: flex; align-items: center; gap: 7px; border: 1px solid #cad8db; border-radius: 5px;
-  background: #fbfdfbf2; box-shadow: var(--shadow); padding: 7px 10px; font-weight: 700; font-size: 12px;
+  background: #fbfdfbf2; box-shadow: var(--shadow); padding: 4px 8px; font-weight: 700; font-size: 11px;
 }
 .scope-dot { width: 8px; height: 8px; border: 1.5px solid #277467; border-radius: 2px; }
-.sample-chip { background: #f3efe2; border-color: #ddd3b8; color: #67582f; font-size: 10px; padding: 7px 8px; }
+.map-scope .sample-chip { background: #f3efe2; border-color: #ddd3b8; color: #67582f; }
+.park-search { position: relative; pointer-events: auto; }
+.park-search-field {
+  min-height: 40px; display: flex; align-items: center; gap: 8px; padding: 4px 7px 4px 11px;
+  border: 1px solid #b9cdd0; border-radius: 7px; color: #41636f; background: #fcfdfb; box-shadow: var(--shadow);
+}
+.park-search-field:focus-within { border-color: #33847b; box-shadow: 0 0 0 2px #3e988425, var(--shadow); }
+.park-search-field input { flex: 1; min-width: 0; padding: 4px 0; border: 0; color: var(--ink); background: transparent; outline: none; }
+.park-search-field input::placeholder { color: #5b7180; }
+.park-search-results {
+  position: absolute; top: calc(100% + 5px); inset-inline: 0; overflow: hidden;
+  background: #fcfdfb; border: 1px solid #cbdcde; border-radius: 7px; box-shadow: 0 9px 24px #182d3d25;
+}
+.park-search-results ul { max-height: min(40dvh, 315px); overflow: auto; overscroll-behavior: contain; list-style: none; margin: 0; padding: 3px 0; }
+.park-search-results li { display: grid; gap: 3px; padding: 8px 12px; font-size: 13px; cursor: pointer; overflow-wrap: anywhere; }
+.park-search-results li:hover, .park-search-results li[aria-selected=true] { background: #e9f3ef; }
+.park-search-results small, .park-search-results p { font-size: 11px; color: var(--muted); }
+.park-search-results p { padding: 9px 12px; }
+.park-search-count { border-top: 1px solid var(--line); }
+.park-pending { color: #84552b; }
+.park-map-popup { z-index: 3; }
+.park-map-popup .maplibregl-popup-content, .park-unplaced {
+  padding: 0; border-radius: 8px; background: #fcfdfb; box-shadow: 0 6px 23px #142e4629;
+}
+.park-unplaced { position: absolute; left: 17px; bottom: 47px; z-index: 4; }
+.park-details { width: min(332px, calc(100vw - 44px)); padding: 11px 13px; font-family: inherit; color: var(--ink); }
+.park-details-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.park-details-head h2 { font-size: 15px; line-height: 1.45; overflow-wrap: anywhere; }
+.park-details-head p { color: var(--muted); font-size: 11px; margin-bottom: 3px; }
+.park-details .icon-button { margin: -4px -5px 0 0; }
+.park-location-note { margin-top: 6px; font-size: 11px; }
+.park-details dl { display: grid; gap: 6px; max-height: min(29dvh, 230px); overflow: auto; margin: 10px 0 0; padding-top: 8px; border-top: 1px solid var(--line); }
+.park-details dl > div { display: grid; grid-template-columns: 5.5em minmax(0, 1fr); gap: 7px; font-size: 12px; line-height: 1.6; }
+.park-details dt { color: var(--muted); }
+.park-details dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .map-navigation {
   position: absolute; top: 17px; right: 17px; display: grid; border-radius: 6px;
   overflow: hidden; box-shadow: var(--shadow); border: 1px solid #cbd8da; background: #fbfdfb;
