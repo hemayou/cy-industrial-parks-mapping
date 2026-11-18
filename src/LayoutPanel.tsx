@@ -1,5 +1,5 @@
-import type { DataLayer, Layout, OutputSpec } from './model';
-import { A1, outputPixels } from './model';
+import type { DataLayer, Layout, MapMargins, OutputSpec } from './model';
+import { A1, DEFAULT_LAYOUT, outputPixels } from './model';
 import { Color, CornerSelect, Field, FontSelect, NumberInput, Section, Select, Toggle } from './controls';
 
 export function LayoutPanel({ layout, layers, output, onLayout, onOutput }: {
@@ -15,14 +15,8 @@ export function LayoutPanel({ layout, layers, output, onLayout, onOutput }: {
         onChange={event => patch({ title: event.currentTarget.value })} /></Field>
       <Field label="副标题"><input type="text" maxLength={110} value={layout.titleSubtitle}
         onChange={event => patch({ titleSubtitle: event.currentTarget.value })} /></Field>
-      <div className="fields two">
-        <Field label="字体"><FontSelect value={layout.titleFont} onChange={titleFont => patch({ titleFont })} /></Field>
-        <Field label="字号（pt）"><NumberInput value={layout.titleSize} min={8} max={125} onChange={titleSize => patch({ titleSize })} /></Field>
-      </div>
-      <div className="fields two">
-        <Field label="位置"><CornerSelect value={layout.titlePosition} onChange={titlePosition => patch({ titlePosition, titleFrame: null })} /></Field>
-        <Color label="图名颜色" value={layout.titleColor} onChange={titleColor => patch({ titleColor })} />
-      </div>
+      <TitleTypography layout={layout} onChange={patch} />
+      <Field label="位置"><CornerSelect value={layout.titlePosition} onChange={titlePosition => patch({ titlePosition, titleFrame: null })} /></Field>
       <Color label="图名框背景" value={layout.titleBackground} onChange={titleBackground => patch({ titleBackground })} />
     </Section>
     <Section title="图例">
@@ -33,6 +27,7 @@ export function LayoutPanel({ layout, layers, output, onLayout, onOutput }: {
       <Field label="图例图层"><Select value={layerList.some(layer => layer.id === layout.legendLayer) ? layout.legendLayer : ''}
         choices={[{ value: '', label: '第一个可见的点图层' }, ...layerList.map(layer => ({ value: layer.id, label: layer.name }))]}
         onChange={legendLayer => patch({ legendLayer })} /></Field>
+      <LegendHeadingTypography layout={layout} onChange={patch} />
       <div className="fields two">
         <Field label="位置"><CornerSelect value={layout.legendPosition} onChange={legendPosition => patch({ legendPosition, legendFrame: null })} /></Field>
         <Field label="分栏数"><NumberInput min={1} max={6} value={layout.legendColumns} onChange={value => patch({ legendColumns: Math.max(1, Math.min(6, Math.trunc(value))) })} /></Field>
@@ -47,6 +42,7 @@ export function LayoutPanel({ layout, layers, output, onLayout, onOutput }: {
         <Color label="图例背景" value={layout.legendBackground} onChange={legendBackground => patch({ legendBackground })} />
       </div>
     </Section>
+    <Section title="地图框边距"><MapMarginControls value={layout.mapMargins} onChange={mapMargins => patch({ mapMargins })} /></Section>
     <Section title="指北针">
       <Toggle checked={layout.north} onChange={north => patch({ north })}>显示指北针</Toggle>
       <div className="fields two">
@@ -56,6 +52,59 @@ export function LayoutPanel({ layout, layers, output, onLayout, onOutput }: {
       <Color label="纸面背景" value={layout.paperColor} onChange={paperColor => patch({ paperColor })} />
     </Section>
   </>;
+}
+
+type TypographyProps = { layout: Layout; onChange: (change: Partial<Layout>) => void };
+
+export function TitleTypography({ layout, onChange }: TypographyProps) {
+  return <div className="control-stack">
+    <div className="fields two">
+      <Field label="标题字体"><FontSelect value={layout.titleFont} onChange={titleFont => onChange({ titleFont })} /></Field>
+      <Field label="主标题字号（pt）"><NumberInput value={layout.titleSize} min={8} max={125} onChange={titleSize => onChange({ titleSize })} /></Field>
+    </div>
+    <div className="fields two">
+      <Field label="标题对齐"><Select value={layout.titleAlign}
+        choices={[{ value: 'auto', label: '自动' }, { value: 'left', label: '左对齐' },
+          { value: 'center', label: '居中' }, { value: 'right', label: '右对齐' }]}
+        onChange={titleAlign => onChange({ titleAlign: titleAlign as Layout['titleAlign'] })} /></Field>
+      <Color label="标题颜色" value={layout.titleColor} onChange={titleColor => onChange({ titleColor })} />
+    </div>
+    <div className="fields two">
+      <Toggle checked={layout.titleShadow} onChange={titleShadow => onChange({ titleShadow })}>标题阴影</Toggle>
+      <Toggle checked={layout.titleOutline} onChange={titleOutline => onChange({ titleOutline })}>标题描边</Toggle>
+    </div>
+  </div>;
+}
+
+export function LegendHeadingTypography({ layout, onChange }: TypographyProps) {
+  return <div className="control-stack">
+    <div className="fields two">
+      <Field label="图例标题字体"><FontSelect value={layout.legendHeadingFont}
+        onChange={legendHeadingFont => onChange({ legendHeadingFont })} /></Field>
+      <Field label="图例标题字号（pt）"><NumberInput value={layout.legendHeadingSize} min={6} max={72}
+        onChange={legendHeadingSize => onChange({ legendHeadingSize })} /></Field>
+    </div>
+    <Color label="图例标题颜色" value={layout.legendHeadingColor}
+      onChange={legendHeadingColor => onChange({ legendHeadingColor })} />
+  </div>;
+}
+
+const marginLabels = [['top', '上边距'], ['bottom', '下边距'], ['left', '左边距'], ['right', '右边距']] as const;
+
+export function MapMarginControls({ value, onChange }: { value: MapMargins; onChange: (value: MapMargins) => void }) {
+  return <div className="control-stack">
+    <div className="fields two">
+      {marginLabels.map(([side, label]) => <Field key={side} label={label + '（mm）'}>
+        <input type="number" min={0} max={2500} step={0.5} placeholder="自动" value={value[side] ?? ''}
+          onChange={event => {
+            const raw = event.currentTarget.valueAsNumber;
+            onChange({ ...value, [side]: Number.isFinite(raw) ? Math.min(2500, Math.max(0, raw)) : null });
+          }} />
+      </Field>)}
+    </div>
+    {Object.values(value).some(amount => amount !== null) &&
+      <button type="button" className="text-button" onClick={() => onChange({ ...DEFAULT_LAYOUT.mapMargins })}>恢复自动边距</button>}
+  </div>;
 }
 
 export function OutputControls({ value, onChange }: { value: OutputSpec; onChange: (value: OutputSpec) => void }) {

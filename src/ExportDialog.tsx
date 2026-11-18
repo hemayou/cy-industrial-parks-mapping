@@ -6,7 +6,7 @@ import { renderSheet } from './map/export';
 import type { FrameKind } from './map/sheet';
 import type { Layout, NormalizedFrame, OutputSpec } from './model';
 import { clampFrame } from './model';
-import { OutputControls } from './LayoutPanel';
+import { LegendHeadingTypography, MapMarginControls, OutputControls, TitleTypography } from './LayoutPanel';
 import { Field, NumberInput } from './controls';
 
 export function downloadBlob(blob: Blob, filename: string) {
@@ -288,22 +288,29 @@ export function ExportDialog({ job, onOutput, onLayout, onClose }: Props) {
       <aside className="export-panel">
         <OutputControls value={job.output} onChange={onOutput} />
         <details className="preview-tools" open>
-          <summary><Move size={15} /> 图框与文字</summary>
+          <summary><Move size={15} /> 图纸标题</summary>
           <p>拖动图名框或图例框，向外拉右下角可调整大小。</p>
           <Field label="主标题"><input value={job.layout.title} maxLength={130}
             onChange={event => info({ title: event.currentTarget.value })} /></Field>
           <Field label="副标题"><input value={job.layout.titleSubtitle} maxLength={110}
             onChange={event => info({ titleSubtitle: event.currentTarget.value })} /></Field>
-          <Field label="主标题字号（pt）"><NumberInput value={job.layout.titleSize} min={8} max={125}
-            onChange={titleSize => info({ titleSize })} /></Field>
+          <TitleTypography layout={job.layout} onChange={info} />
+        </details>
+        <details className="preview-tools">
+          <summary>图例与名录</summary>
+          <LegendHeadingTypography layout={job.layout} onChange={info} />
           <div className="fields two">
             <Field label="图例文字（pt）"><NumberInput value={job.layout.legendSize} min={6} max={60}
               onChange={legendSize => info({ legendSize })} /></Field>
             <Field label="图例符号（pt）"><NumberInput value={job.layout.legendSymbolSize} min={5} max={60}
               onChange={legendSymbolSize => info({ legendSymbolSize })} /></Field>
           </div>
-          <button className="text-button" type="button" onClick={restoreFrames} disabled={!!busy}>恢复自动版位</button>
         </details>
+        <details className="preview-tools">
+          <summary>地图框边距</summary>
+          <MapMarginControls value={job.layout.mapMargins} onChange={mapMargins => info({ mapMargins })} />
+        </details>
+        <button className="text-button" type="button" onClick={restoreFrames} disabled={!!busy}>恢复自动版位</button>
         <div className="button-stack">
           <button className="button secondary" onClick={() => void run(true)} disabled={!!busy} type="button"><RefreshCw size={16} /> 刷新预览</button>
           <button className="button primary download-button" onClick={() => void run(false)} disabled={!!busy} type="button">

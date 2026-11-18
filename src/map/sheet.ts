@@ -11,12 +11,13 @@ export interface SheetFrameImage { kind: FrameKind; frame: NormalizedFrame; blob
 interface SheetPlan {
   map: Rect;
   title: { box: Rect; lines: string[]; subtitle: string[] } | null;
-  legend: { box: Rect; columns: MeasuredRow[][]; columnWidth: number } | null;
+  legend: { box: Rect; columns: MeasuredRow[][]; columnWidth: number; heading: string[]; rowsY: number } | null;
   footer: string[];
   margin: number;
 }
 
 const pointToCss = 96 / 72;
+const mmToCss = 96 / 25.4;
 const creditFontSize = 9;
 export const fontCss = (font: FontFamily, size: number, weight = 400) =>
   `${weight} ${size * pointToCss}px "${font}", "PingFang SC", "Microsoft YaHei", sans-serif`;
@@ -64,12 +65,17 @@ function legendRows(layers: DataLayer[], layout: Layout): LegendRow[] {
   });
 }
 
+function legendTitle(layout: Layout) {
+  return layout.legendMode === 'numbered' ? '项目名录' : '分类图例';
+}
+
 export async function prepareSheetFonts(layout: Layout, layers: DataLayer[], attribution: string[]) {
   const legendText = legendRows(layers, layout).map(row => row.text + (row.number ?? '')).join('');
   await Promise.all([
     document.fonts.load(fontCss(layout.titleFont, layout.titleSize, 700), layout.title + layout.titleSubtitle || '制图'),
     document.fonts.load(fontCss(layout.legendFont, layout.legendSize), legendText || '图例'),
-    document.fonts.load(fontCss('Noto Sans SC', 11, 700), '北项目名录分类图例'),
+    document.fonts.load(fontCss(layout.legendHeadingFont, layout.legendHeadingSize, 700), legendTitle(layout)),
+    document.fonts.load(fontCss('Noto Sans SC', 11, 700), '北0123456789'),
     document.fonts.load(fontCss('Noto Sans SC', creditFontSize), sheetCredit(attribution)),
   ]);
 }
@@ -138,18 +144,25 @@ export function planSheet(
     const frame = layout.legendFrame;
     const maximumLegendWidth = frame ? Math.min(width, frame.width * width) : numbered ? usableWidth * 0.43 : usableWidth;
     const idealWidth = Math.max(...rows.map(row => context.measureText(row.text).width)) + symbolSize + 27;
+    const titleFont = fontCss(layout.legendHeadingFont, layout.legendHeadingSize, 700);
+    const titleText = legendTitle(layout);
+    context.font = titleFont;
+    const titleColumn = (context.measureText(titleText).width + 2) / columnCount;
     const availableColumn = (maximumLegendWidth - padding * 2) / columnCount;
-    const columnWidth = frame ? availableColumn : Math.min(availableColumn, Math.max(100, idealWidth));
+    const columnWidth = frame ? availableColumn : Math.min(availableColumn, Math.max(100, idealWidth, titleColumn));
     const textWidth = columnWidth - symbolSize - 22;
     if (textWidth < 24) throw new Error('画幅内的单栏图例太窄，请减少栏数、减小字号或加宽画幅。');
+    const boxWidth = columnWidth * columnCount + padding * 2;
+    const heading = wrapText(context, titleText, boxWidth - padding * 2);
+    const rowsY = 21 + heading.length * layout.legendHeadingSize * pointToCss * 1.25;
+    context.font = fontCss(layout.legendFont, layout.legendSize);
     const columns = Array.from({ length: columnCount }, (_, column) =>
       rows.slice(column * rowCount, (column + 1) * rowCount).map(row => {
         const lines = wrapText(context, row.text, textWidth);
         return { ...row, lines, height: Math.max(symbolSize, lines.length * textLine) + rowGap };
       }),
     );
-    const boxWidth = columnWidth * columnCount + padding * 2;
-    const contentHeight = Math.max(...columns.map(column => column.reduce((sum, row) => sum + row.height, 0))) + 47;
+    const contentHeight = Math.max(...columns.map(column => column.reduce((sum, row) => sum + row.height, 0))) + rowsY + 8;
     const boxHeight = Math.max(contentHeight, frame ? frame.height * height : 0);
     const availableHeight = frame ? height : bottom - top - (numbered ? 0 : 165);
     if (boxHeight > availableHeight) {
@@ -159,7 +172,7 @@ export function planSheet(
       box: frame
         ? { x: Math.min(width - boxWidth, frame.x * width), y: Math.min(height - boxHeight, frame.y * height), width: boxWidth, height: boxHeight }
         : { x: isRight ? width - margin - boxWidth : margin, y: isTop ? top : bottom - boxHeight, width: boxWidth, height: boxHeight },
-      columns, columnWidth,
+      columns, columnWidth, heading, rowsY,
     };
     if (!frame) {
       if (numbered) {
@@ -173,8 +186,14 @@ export function planSheet(
     }
 
   }
-  if (mapWidth < 150 || bottom - top < 150) throw new Error('成图留给地图的空间不足，请加大画幅或缩减图面要素。');
-  return { map: { x: mapX, y: top, width: mapWidth, height: bottom - top }, title, legend, footer, margin };
+  const edges = layout.mapMargins;
+  const x = edges.left === null ? mapX : edges.left * mmToCss;
+  const y = edges.top === null ? top : edges.top * mmToCss;
+  const right = edges.right === null ? mapX + mapWidth : width - edges.right * mmToCss;
+  const lower = edges.bottom === null ? bottom : height - edges.bottom * mmToCss;
+  const map = { x, y, width: right - x, height: lower - y };
+  if (map.width < 150 || map.height < 150) throw new Error('地图框空间不足，请减小边距、调整版位或加大画幅。');
+  return { map, title, legend, footer, margin };
 }
 
 function paintTitle(context: CanvasRenderingContext2D, planFrame: SheetPlan['title'], layout: Layout) {
@@ -182,38 +201,61 @@ function paintTitle(context: CanvasRenderingContext2D, planFrame: SheetPlan['tit
   const { box, lines, subtitle } = planFrame;
   const textSize = layout.titleSize * pointToCss;
   const padding = Math.max(12, textSize * .46);
+  context.save();
   context.fillStyle = layout.titleBackground;
   context.fillRect(box.x, box.y, box.width, box.height);
   context.strokeStyle = '#35424a';
   context.lineWidth = 1.2;
   context.strokeRect(box.x + .65, box.y + .65, box.width - 1.3, box.height - 1.3);
   context.textBaseline = 'top';
-  context.textAlign = 'left';
-  context.font = fontCss(layout.titleFont, layout.titleSize, 700);
   context.fillStyle = layout.titleColor;
-  lines.forEach((line, index) => context.fillText(line, box.x + padding, box.y + padding + index * textSize * 1.18));
-  context.textAlign = 'right';
-  context.font = fontCss(layout.titleFont, layout.titleSize * .57, 700);
+  context.strokeStyle = readableInk(layout.titleColor);
+  context.lineJoin = 'round';
+  const pixelScale = layout.titleShadow ? context.getTransform().a : 1;
+  const mainAlign = layout.titleAlign === 'auto' ? 'left' : layout.titleAlign;
+  const captionAlign = layout.titleAlign === 'auto' ? 'right' : layout.titleAlign;
+  function paintLines(values: string[], size: number, align: CanvasTextAlign, top: number, step: number) {
+    const x = align === 'center' ? box.x + box.width / 2
+      : align === 'right' ? box.x + box.width - padding : box.x + padding;
+    context.textAlign = align;
+    context.font = fontCss(layout.titleFont, size, 700);
+    context.lineWidth = Math.max(1, size * .065);
+    for (const [index, line] of values.entries()) {
+      const y = top + index * step;
+      if (layout.titleShadow) {
+        context.shadowColor = '#172c4080';
+        context.shadowBlur = Math.max(1.5, size * .12) * pixelScale;
+        context.shadowOffsetY = Math.max(1, size * .08) * pixelScale;
+        context.fillText(line, x, y);
+        context.shadowColor = '#00000000';
+      }
+      if (layout.titleOutline) context.strokeText(line, x, y);
+      context.fillText(line, x, y);
+    }
+  }
+  paintLines(lines, layout.titleSize, mainAlign, box.y + padding, textSize * 1.18);
   const captionY = box.y + box.height - padding - subtitle.length * textSize * .77;
-  subtitle.forEach((line, index) => context.fillText(line, box.x + box.width - padding, captionY + index * textSize * .77));
+  paintLines(subtitle, layout.titleSize * .57, captionAlign, captionY, textSize * .77);
+  context.restore();
 }
 
 function paintLegend(context: CanvasRenderingContext2D, planFrame: SheetPlan['legend'], layout: Layout) {
   context.textBaseline = 'top';
   if (planFrame) {
-    const { box, columns, columnWidth } = planFrame;
+    const { box, columns, columnWidth, heading, rowsY } = planFrame;
     context.fillStyle = layout.legendBackground;
     context.fillRect(box.x, box.y, box.width, box.height);
     context.strokeStyle = '#a1afb8';
     context.strokeRect(box.x, box.y, box.width, box.height);
     context.textAlign = 'left';
-    context.font = fontCss('Noto Sans SC', 11, 700);
-    context.fillStyle = layout.legendColor;
-    context.fillText(layout.legendMode === 'numbered' ? '项目名录' : '分类图例', box.x + 15, box.y + 11);
+    context.font = fontCss(layout.legendHeadingFont, layout.legendHeadingSize, 700);
+    context.fillStyle = layout.legendHeadingColor;
+    const headingLine = layout.legendHeadingSize * pointToCss * 1.25;
+    heading.forEach((line, index) => context.fillText(line, box.x + 15, box.y + 11 + index * headingLine));
     const symbolSize = layout.legendSymbolSize * pointToCss;
     const textLine = layout.legendSize * pointToCss * 1.28;
     columns.forEach((column, columnIndex) => {
-      let y = box.y + 39;
+      let y = box.y + rowsY;
       const x = box.x + 15 + columnIndex * columnWidth;
       for (const row of column) {
         const markerSize = row.number ? Math.max(symbolSize, row.number.length * symbolSize / 2) : symbolSize * .83;

@@ -297,12 +297,13 @@ summary { cursor: pointer; font-weight: 700; }
 .park-pending { color: var(--ui-warn-text); }
 .park-map-popup { z-index: 3; }
 .park-map-popup .maplibregl-popup-content, .park-unplaced {
-  padding: 0; border-radius: 8px; background: var(--ui-surface); box-shadow: 0 6px 23px #142e4629;
+  padding: 0; border: 1px solid var(--ui-highlight); border-radius: 13px; background: var(--glass-panel);
+  backdrop-filter: var(--glass-filter); box-shadow: 0 7px 27px #142e4629, inset 0 1px 0 var(--ui-highlight);
 }
-.park-map-popup:is(.maplibregl-popup-anchor-top, .maplibregl-popup-anchor-top-left, .maplibregl-popup-anchor-top-right) .maplibregl-popup-tip { border-bottom-color: var(--ui-surface); }
-.park-map-popup:is(.maplibregl-popup-anchor-bottom, .maplibregl-popup-anchor-bottom-left, .maplibregl-popup-anchor-bottom-right) .maplibregl-popup-tip { border-top-color: var(--ui-surface); }
-.park-map-popup.maplibregl-popup-anchor-left .maplibregl-popup-tip { border-right-color: var(--ui-surface); }
-.park-map-popup.maplibregl-popup-anchor-right .maplibregl-popup-tip { border-left-color: var(--ui-surface); }
+.park-map-popup:is(.maplibregl-popup-anchor-top, .maplibregl-popup-anchor-top-left, .maplibregl-popup-anchor-top-right) .maplibregl-popup-tip { border-bottom-color: var(--glass-control); }
+.park-map-popup:is(.maplibregl-popup-anchor-bottom, .maplibregl-popup-anchor-bottom-left, .maplibregl-popup-anchor-bottom-right) .maplibregl-popup-tip { border-top-color: var(--glass-control); }
+.park-map-popup.maplibregl-popup-anchor-left .maplibregl-popup-tip { border-right-color: var(--glass-control); }
+.park-map-popup.maplibregl-popup-anchor-right .maplibregl-popup-tip { border-left-color: var(--glass-control); }
 .park-unplaced { position: absolute; left: calc(var(--map-inset-left) + 17px); bottom: 47px; z-index: 4; }
 .park-details { width: min(332px, calc(100vw - 44px)); padding: 11px 13px; font-family: inherit; color: var(--ink); }
 .park-details-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
@@ -384,7 +385,9 @@ dialog::backdrop { background: #102535a6; }
 .import-options { padding: 17px; display: grid; gap: 13px; }
 .import-options p { color: var(--muted); font-size: 12px; }
 .import-options .button { width: fit-content; }
-.export-dialog { width: 950px; }
+.export-dialog { width: 950px; border-radius: 17px; border-color: var(--ui-highlight); background: transparent; }
+.export-dialog::backdrop { background: #142c407a; }
+.export-dialog .dialog-header, .export-panel { background: var(--glass-panel); backdrop-filter: var(--glass-filter); }
 .export-grid { display: grid; grid-template-columns: minmax(0, 1fr) 278px; min-height: 425px; }
 .sheet-preview {
   min-height: min(68vh, 620px); max-height: calc(100dvh - 92px); background: var(--ui-stage); display: grid; place-items: center;

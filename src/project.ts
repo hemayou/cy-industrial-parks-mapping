@@ -1,5 +1,5 @@
 import { A1, DEFAULT_BASEMAP, DEFAULT_BOUNDARY, DEFAULT_LAYER, DEFAULT_LAYOUT, clampFrame } from './model';
-import type { BasemapId, BasemapStyle, BoundaryStyle, LayerAsset, LayerStyle, Layout, NormalizedFrame, OutputSpec } from './model';
+import type { BasemapId, BasemapStyle, BoundaryStyle, LayerAsset, LayerStyle, Layout, MapMargins, NormalizedFrame, OutputSpec } from './model';
 import { BASEMAPS } from './map/basemap';
 import { POINT_PALETTES } from './pointPalettes';
 
@@ -30,7 +30,9 @@ const enumValues: Record<string, string[]> = {
   placement: ['auto', 'n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'],
   font: ['Noto Sans SC', 'Noto Serif SC'],
   titleFont: ['Noto Sans SC', 'Noto Serif SC'],
+  titleAlign: ['auto', 'left', 'center', 'right'],
   legendFont: ['Noto Sans SC', 'Noto Serif SC'],
+  legendHeadingFont: ['Noto Sans SC', 'Noto Serif SC'],
   titlePosition: ['tl', 'tr', 'bl', 'br'], legendPosition: ['tl', 'tr', 'bl', 'br'], northPosition: ['tl', 'tr', 'bl', 'br'],
   legendMode: ['categories', 'numbered'], mode: ['paper', 'pixels'], type: ['png', 'jpeg'],
   categoryPalette: POINT_PALETTES.map(palette => palette.id),
@@ -38,7 +40,7 @@ const enumValues: Record<string, string[]> = {
 const colorKeys = /^(color|halo|stroke|\w*Color\w*|\w*Background)$/;
 const rangeByKey: Record<string, [number, number]> = {
   maxLines: [1, 6], lineHeight: [.75, 2.5], size: [1, 72], strokeWidth: [0, 8], haloWidth: [0, 6], opacity: [0, 1], legendColumns: [1, 6],
-  titleSize: [8, 125], legendSize: [6, 60], legendSymbolSize: [5, 60], northSize: [14, 100],
+  titleSize: [8, 125], legendSize: [6, 60], legendHeadingSize: [6, 72], legendSymbolSize: [5, 60], northSize: [14, 100],
   dpi: [36, 1200], paperWidth: [30, 2500], paperHeight: [30, 2500],
 };
 
@@ -83,6 +85,15 @@ function readFrame(value: unknown): NormalizedFrame | null {
   return [x, y, width, height].every(Number.isFinite) ? clampFrame({ x, y, width, height }) : null;
 }
 
+function readMapMargins(value: unknown): MapMargins {
+  if (!isObject(value)) return { ...DEFAULT_LAYOUT.mapMargins };
+  const amount = (side: keyof MapMargins) => {
+    const raw = value[side];
+    return typeof raw === 'number' && Number.isFinite(raw) ? Math.min(2500, Math.max(0, raw)) : null;
+  };
+  return { top: amount('top'), right: amount('right'), bottom: amount('bottom'), left: amount('left') };
+}
+
 export function readProject(value: unknown): ProjectFile {
   if (!isObject(value) || value.schemaVersion !== 1 || !Array.isArray(value.layers)) {
     throw new Error('请选择版本为 1 的出图配置 JSON 文件。');
@@ -115,6 +126,8 @@ export function readProject(value: unknown): ProjectFile {
   if (isObject(value.layout)) {
     layout.titleFrame = readFrame(value.layout.titleFrame);
     layout.legendFrame = readFrame(value.layout.legendFrame);
+    layout.mapMargins = readMapMargins(value.layout.mapMargins);
+    if (!Object.hasOwn(value.layout, 'legendHeadingColor')) layout.legendHeadingColor = layout.legendColor;
   }
   return {
     schemaVersion: 1, basemap, basemapStyle: base, layers,

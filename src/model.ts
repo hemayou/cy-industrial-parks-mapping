@@ -103,6 +103,8 @@ export interface NormalizedFrame {
   height: number;
 }
 
+export type MapMargins = Record<'top' | 'right' | 'bottom' | 'left', number | null>;
+
 export interface Layout {
   title: string;
   titleSubtitle: string;
@@ -113,6 +115,9 @@ export interface Layout {
   titleFont: FontFamily;
   titleSize: number;
   titleColor: string;
+  titleAlign: 'auto' | 'left' | 'center' | 'right';
+  titleShadow: boolean;
+  titleOutline: boolean;
   legend: boolean;
   legendLayer: string;
   legendMode: 'categories' | 'numbered';
@@ -123,7 +128,11 @@ export interface Layout {
   legendSize: number;
   legendSymbolSize: number;
   legendColor: string;
+  legendHeadingFont: FontFamily;
+  legendHeadingSize: number;
+  legendHeadingColor: string;
   legendBackground: string;
+  mapMargins: MapMargins;
   north: boolean;
   northPosition: Corner;
   northSize: number;
@@ -162,10 +171,12 @@ export const DEFAULT_BASEMAP: BasemapStyle = {
 export const DEFAULT_BOUNDARY: BoundaryStyle = { visible: true, color: '#2d5569', opacity: 1, width: 2.3, line: 'solid' };
 export const DEFAULT_LAYOUT: Layout = {
   title: '朝阳区科技园区空间分布图', titleSubtitle: '', titleBackground: '#fcfbf8', titleFrame: null, titleVisible: true, titlePosition: 'tl',
-  titleFont: 'Noto Serif SC', titleSize: 41, titleColor: '#182d42',
+  titleFont: 'Noto Serif SC', titleSize: 41, titleColor: '#182d42', titleAlign: 'auto', titleShadow: false, titleOutline: false,
   legend: true, legendLayer: '', legendMode: 'categories', legendPosition: 'bl', legendFrame: null, legendColumns: 1,
   legendFont: 'Noto Sans SC', legendSize: 14, legendSymbolSize: 15, legendColor: '#243644',
+  legendHeadingFont: 'Noto Sans SC', legendHeadingSize: 11, legendHeadingColor: '#243644',
   legendBackground: '#ffffff', north: true, northPosition: 'tr', northSize: 46, paperColor: '#f8fafb',
+  mapMargins: { top: null, right: null, bottom: null, left: null },
 };
 
 export function paperPixels(mm: number, dpi: number): number {
