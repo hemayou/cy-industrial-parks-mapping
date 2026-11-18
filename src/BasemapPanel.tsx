@@ -45,8 +45,8 @@ export function BasemapPanel(props: Props) {
     patch({ layerDensity: { ...style.layerDensity, [id]: density }, layerVisibility });
   }
   return <>
-    <Section title="矢量底图">
-      {(['esri', 'carto', 'open'] as const).map(provider =>
+    <Section title="底图选择">
+      {(['esri', 'carto', 'tianditu', 'open'] as const).map(provider =>
         <div key={provider} className="provider-row">
           <div className="provider-name">{providerName[provider]}</div>
           <div className="base-options">
@@ -61,7 +61,7 @@ export function BasemapPanel(props: Props) {
                 <span aria-hidden className={`base-sample ${entry.dark ? 'dark' : ''} ${/streets|voyager/.test(entry.slug) ? 'rich' : ''}`}>
                   <i /><b /><em />
                 </span>
-                <span>{entry.name}</span>
+                <span>{entry.name}{entry.provider === 'tianditu' ? ' · WMTS' : ''}</span>
               </button>
             )}
           </div>
@@ -77,10 +77,17 @@ export function BasemapPanel(props: Props) {
         <Field label="CARTO API key"><input type="password" value={draft.carto} autoComplete="off"
           placeholder={keys.carto ? '工作台已配置' : '输入 CARTO API key'}
           onChange={event => setDraft({ ...draft, carto: event.currentTarget.value })} /></Field>
+        <Field label="天地图 tk"><input type="password" value={draft.tianditu} autoComplete="off"
+          placeholder={keys.tianditu ? '工作台已配置' : '输入天地图应用密钥'}
+          onChange={event => setDraft({ ...draft, tianditu: event.currentTarget.value })} /></Field>
         <div className="button-row"><button className="button secondary" type="submit">应用凭据</button>
           <button type="button" className="button quiet" onClick={onRetry}><RotateCcw size={14} /> 重试连接</button></div>
       </form>}
     </Section>
+    {current.provider === 'tianditu' ? <Section title="天地图注记">
+      <Toggle checked={style.labels} onChange={labels => patch({ labels })}>显示中文注记</Toggle>
+      <p className="layer-hint">底图和注记使用 WMTS 图像切片，路色和字形由天地图绘制。</p>
+    </Section> : <>
     <Section title="底图地名">
       <div className="stack small-gap">
         <Toggle checked={style.labels} onChange={labels => patch({ labels })}>中文地名</Toggle>
@@ -129,6 +136,7 @@ export function BasemapPanel(props: Props) {
         </div>
       </details>
     </Section>
+    </>}
     <BoundaryControls value={boundary} onChange={onBoundary} onReplace={props.onImportBoundary} />
   </>;
 }

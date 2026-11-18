@@ -5,6 +5,7 @@ import { fontStack } from './basemap';
 import { mapFontFaces } from './fonts';
 import { markerId } from './markers';
 import { formatPointLabel, pointLabelLayout } from './pointLabels';
+import { tiandituLabelLayer } from './tianditu';
 
 export function lineDash(line: LineStyle) {
   if (line === 'dashed') return [3, 2];
@@ -176,7 +177,8 @@ export function composeStyle({ base, overlays, boundary, boundaryStyle, layout }
       paint: { 'line-color': boundaryStyle.color, 'line-opacity': boundaryStyle.opacity, 'line-width': boundaryStyle.width, ...(dash ? { 'line-dasharray': dash } : {}) },
     });
   }
-  const baseShapes = base.layers.filter(layer => layer.type !== 'symbol');
-  const baseText = base.layers.filter(layer => layer.type === 'symbol');
+  const isBaseText = (layer: LayerSpecification) => layer.type === 'symbol' || layer.id === tiandituLabelLayer;
+  const baseShapes = base.layers.filter(layer => !isBaseText(layer));
+  const baseText = base.layers.filter(isBaseText);
   return { ...base, sources, 'font-faces': mapFontFaces(), layers: [...baseShapes, ...shapes, ...baseText, ...symbols] };
 }

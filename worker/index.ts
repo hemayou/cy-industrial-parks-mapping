@@ -5,6 +5,7 @@ interface Env {
   WORKSPACE_SESSION_KEY?: string;
   ESRI_BROWSER_API_KEY?: string;
   CARTO_BROWSER_API_KEY?: string;
+  TIANDITU_BROWSER_TK?: string;
 }
 
 const loginPath = '/_workspace/login';
@@ -224,6 +225,7 @@ export default {
         const body = request.method === 'HEAD' ? null : JSON.stringify({
           esri: env.ESRI_BROWSER_API_KEY ?? '',
           carto: env.CARTO_BROWSER_API_KEY ?? '',
+          tianditu: env.TIANDITU_BROWSER_TK ?? '',
         });
         return new Response(body, { headers });
       }

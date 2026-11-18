@@ -1,4 +1,4 @@
-import { Download, Image, LoaderCircle, Move, RefreshCw, X } from 'lucide-react';
+import { Download, Image, LoaderCircle, Maximize, Minus, Move, Plus, RefreshCw, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent, PointerEvent } from 'react';
 import type { ExportJob } from './map/export';
@@ -29,6 +29,11 @@ interface Props {
 
 interface FrameView { kind: FrameKind; frame: NormalizedFrame; url: string }
 interface Preview { url: string; frames: FrameView[] }
+interface ViewPosition { zoom: number; x: number; y: number }
+const fittedView: ViewPosition = { zoom: 1, x: 0, y: 0 };
+const previewStep = 1.25;
+interface PreviewPan { clientX: number; clientY: number; view: ViewPosition }
+
 interface Drag {
   kind: FrameKind; start: NormalizedFrame; current: NormalizedFrame;
   clientX: number; clientY: number; sheetWidth: number; sheetHeight: number;
@@ -38,12 +43,17 @@ interface Drag {
 export function ExportDialog({ job, onOutput, onLayout, onClose }: Props) {
   const element = useRef<HTMLDialogElement>(null);
   const stage = useRef<HTMLDivElement>(null);
+  const viewport = useRef<HTMLDivElement>(null);
+  const previewPan = useRef<PreviewPan | null>(null);
   const urls = useRef<string[]>([]);
   const readyUrl = useRef<string | null>(null);
   const dragRef = useRef<Drag | null>(null);
   const closed = useRef(false);
   const running = useRef(false);
   const [preview, setPreview] = useState<Preview | null>(null);
+  const [view, setView] = useState<ViewPosition>(fittedView);
+  const [panning, setPanning] = useState(false);
+  const previewReady = Boolean(preview);
   const [draftFrame, setDraftFrame] = useState<{ kind: FrameKind; frame: NormalizedFrame } | null>(null);
   const [busy, setBusy] = useState<'preview' | 'download' | ''>('preview');
   const [message, setMessage] = useState('');
@@ -100,6 +110,76 @@ export function ExportDialog({ job, onOutput, onLayout, onClose }: Props) {
       if (readyUrl.current) URL.revokeObjectURL(readyUrl.current);
     };
   }, []);
+
+  function boundedView(next: ViewPosition): ViewPosition {
+    const area = viewport.current;
+    const paper = stage.current;
+    if (!area || !paper) return next;
+    const width = paper.offsetWidth * next.zoom;
+    const height = paper.offsetHeight * next.zoom;
+    const insetX = Math.min(64, width / 3, area.clientWidth / 3);
+    const insetY = Math.min(64, height / 3, area.clientHeight / 3);
+    const maxX = (width + area.clientWidth) / 2 - insetX;
+    const maxY = (height + area.clientHeight) / 2 - insetY;
+    return { ...next, x: Math.min(maxX, Math.max(-maxX, next.x)), y: Math.min(maxY, Math.max(-maxY, next.y)) };
+  }
+
+  function zoomPaper(factor: number, focalX = 0, focalY = 0) {
+    setView(previous => {
+      const zoom = Math.max(.5, Math.min(5, previous.zoom * factor));
+      if (zoom === previous.zoom) return previous;
+      const ratio = zoom / previous.zoom;
+      return boundedView({
+        zoom,
+        x: focalX - (focalX - previous.x) * ratio,
+        y: focalY - (focalY - previous.y) * ratio,
+      });
+    });
+  }
+
+  useEffect(() => {
+    const area = viewport.current;
+    if (!area || !previewReady) return;
+    const wheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const box = area.getBoundingClientRect();
+      const delta = Math.max(-180, Math.min(180, event.deltaY * (event.deltaMode === 1 ? 16 : 1)));
+      zoomPaper(Math.exp(-delta * .0023), event.clientX - box.left - box.width / 2, event.clientY - box.top - box.height / 2);
+    };
+    area.addEventListener('wheel', wheel, { passive: false });
+    return () => area.removeEventListener('wheel', wheel);
+  }, [previewReady]);
+
+  function startPan(event: PointerEvent<HTMLDivElement>) {
+    if (!previewReady || event.button !== 0 || !(event.target instanceof Element) || event.target.closest('.paper-element')) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    previewPan.current = { clientX: event.clientX, clientY: event.clientY, view };
+    setPanning(true);
+  }
+
+  function panPaper(event: PointerEvent<HTMLDivElement>) {
+    const drag = previewPan.current;
+    if (!drag) return;
+    setView(boundedView({ ...drag.view, x: drag.view.x + event.clientX - drag.clientX, y: drag.view.y + event.clientY - drag.clientY }));
+  }
+
+  function stopPan() {
+    previewPan.current = null;
+    setPanning(false);
+  }
+
+  function keyboardView(event: KeyboardEvent<HTMLDivElement>) {
+    if (!previewReady || event.target !== event.currentTarget) return;
+    const arrows: Record<string, [number, number]> = { ArrowLeft: [32, 0], ArrowRight: [-32, 0], ArrowUp: [0, 32], ArrowDown: [0, -32] };
+    if (arrows[event.key]) {
+      const [dx, dy] = arrows[event.key];
+      setView(previous => boundedView({ ...previous, x: previous.x + dx, y: previous.y + dy }));
+    } else if (event.key === '+' || event.key === '=') zoomPaper(previewStep);
+    else if (event.key === '-') zoomPaper(1 / previewStep);
+    else if (event.key === '0') setView(fittedView);
+    else return;
+    event.preventDefault();
+  }
 
   function commitFrame(kind: FrameKind, frame: NormalizedFrame) {
     const key = kind === 'legend' ? 'legendFrame' : 'titleFrame';
@@ -165,7 +245,22 @@ export function ExportDialog({ job, onOutput, onLayout, onClose }: Props) {
     </header>
     <div className="export-grid">
       <div className="sheet-preview" aria-busy={busy === 'preview'}>
-        {preview ? <div className="paper-stage" ref={stage}>
+        <div className="paper-tools" role="toolbar" aria-label="图纸预览工具">
+          <button className="icon-button" type="button" aria-label="缩小图纸" title="缩小图纸" disabled={!previewReady || view.zoom <= .5}
+            onClick={() => zoomPaper(1 / previewStep)}><Minus size={18} /></button>
+          <output aria-label="预览缩放比例">{Math.round(view.zoom * 100)}%</output>
+          <button className="icon-button" type="button" aria-label="放大图纸" title="放大图纸" disabled={!previewReady || view.zoom >= 5}
+            onClick={() => zoomPaper(previewStep)}><Plus size={18} /></button>
+          <button className="icon-button" type="button" aria-label="适合窗口" title="缩放和平移复位" disabled={!previewReady}
+            onClick={() => setView(fittedView)}><Maximize size={16} /></button>
+          <span>拖动画布平移</span>
+        </div>
+        <div ref={viewport} className={`paper-viewport ${panning ? 'panning' : ''}`} tabIndex={0} role="region"
+          aria-label="图纸预览，使用滚轮缩放并拖动画布平移"
+          onPointerDown={startPan} onPointerMove={panPaper} onPointerUp={stopPan} onPointerCancel={stopPan}
+          onKeyDown={keyboardView}>
+        {preview ? <div className="paper-stage" ref={stage}
+          style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.zoom})` }}>
           <img className="sheet-background" src={preview.url} alt="朝阳区专题图成图预览" draggable={false} />
           {preview.frames.map(item => {
             const frame = draftFrame?.kind === item.kind ? draftFrame.frame : item.frame;
@@ -187,6 +282,7 @@ export function ExportDialog({ job, onOutput, onLayout, onClose }: Props) {
           {busy === 'preview' ? <LoaderCircle className="spin" /> : <Image />}
           <span>{busy === 'preview' ? '正在绘制预览' : '预览暂不可用'}</span>
         </div>}
+        </div>
         {stale && preview && busy !== 'preview' && <span className="preview-stale">设置已调整，请刷新预览</span>}
       </div>
       <aside className="export-panel">

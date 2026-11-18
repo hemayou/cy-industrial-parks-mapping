@@ -68,7 +68,7 @@ export async function renderSheet(job: ExportJob, preview = false) {
   await prepareSheetFonts(layout, layers, attribution);
 
   const canvas = document.createElement('canvas');
-  const scale = preview ? Math.min(dpiScale, 800 / Math.max(logicalWidth, logicalHeight)) : dpiScale;
+  const scale = preview ? Math.min(dpiScale, 2400 / Math.max(logicalWidth, logicalHeight)) : dpiScale;
   canvas.width = preview ? Math.round(logicalWidth * scale) : width;
   canvas.height = preview ? Math.round(logicalHeight * scale) : height;
   const context = canvas.getContext('2d', { alpha: false });

@@ -10,7 +10,7 @@ import { ExportDialog, downloadBlob } from './ExportDialog';
 import { Field, Select } from './controls';
 import { A1, DEFAULT_BASEMAP, DEFAULT_BOUNDARY, DEFAULT_LAYOUT, DISTRICT_FALLBACK, defaultLayer, extent } from './model';
 import type { BasemapStyle, BoundaryStyle, Collection, DataLayer, Layout, OutputSpec } from './model';
-import { attributionText, EMPTY_STYLE, fetchBasemap, findBasemap, providerName, styleBasemap } from './map/basemap';
+import { attributionText, EMPTY_STYLE, fetchBasemap, findBasemap, providerCredential, providerName, styleBasemap } from './map/basemap';
 import type { CatalogStyle, ProviderKeys } from './map/basemap';
 import { composeStyle } from './map/compose';
 import { readGeoJson } from './data/importer';
@@ -22,7 +22,7 @@ type Tab = 'base' | 'layers' | 'layout';
 const openedMap = findBasemap('open-light');
 const defaultBoundaryPath = '/data/chaoyang-osm.geojson';
 const boundaryLayerId = 'cy-district-style';
-const emptyKeys: ProviderKeys = { esri: '', carto: '' };
+const emptyKeys: ProviderKeys = { esri: '', carto: '', tianditu: '' };
 const tabs = [{ id: 'base', label: '底图', icon: MapIcon }, { id: 'layers', label: '图层', icon: Layers3 }, { id: 'layout', label: '版式', icon: PanelTop }] as const;
 
 async function assetGeoJson(path: string, label: string) {
@@ -85,7 +85,11 @@ export function App() {
   const [loaded, setLoaded] = useState<{ entry: CatalogStyle; raw: StyleSpecification }>({ entry: openedMap, raw: EMPTY_STYLE });
   const [manualKeys, setManualKeys] = useState<ProviderKeys>(emptyKeys);
   const [managedKeys, setManagedKeys] = useState<ProviderKeys>(emptyKeys);
-  const keys = { esri: manualKeys.esri || managedKeys.esri, carto: manualKeys.carto || managedKeys.carto };
+  const keys = {
+    esri: manualKeys.esri || managedKeys.esri,
+    carto: manualKeys.carto || managedKeys.carto,
+    tianditu: manualKeys.tianditu || managedKeys.tianditu,
+  };
   const [load, setLoad] = useState<'loading' | 'ready' | 'failed' | 'key'>('loading');
   const [retry, setRetry] = useState(0);
   const [baseStyle, setBaseStyle] = useState<BasemapStyle>(structuredClone(DEFAULT_BASEMAP));
@@ -133,6 +137,7 @@ export function App() {
       setManagedKeys({
         esri: typeof values?.esri === 'string' ? values.esri.trim() : '',
         carto: typeof values?.carto === 'string' ? values.carto.trim() : '',
+        tianditu: typeof values?.tianditu === 'string' ? values.tianditu.trim() : '',
       });
     }).catch(() => {});
     return () => {
@@ -339,7 +344,7 @@ export function App() {
   }
 
   const status = load === 'loading' ? '正在连接矢量底图'
-    : load === 'key' ? `请填写 ${providerName[selected.provider]} API key`
+    : load === 'key' && selected.provider !== 'open' ? `请填写 ${providerCredential[selected.provider]}`
     : load === 'failed' || tileFailed ? '底图连接待重试' : `${providerName[loaded.entry.provider]} · ${loaded.entry.name}`;
 
   return <div className="app-shell">
@@ -368,7 +373,7 @@ export function App() {
         <div className="panel">
           {tab === 'base' && <BasemapPanel current={selected} raw={loaded.raw} style={baseStyle} boundary={boundaryStyle}
             keys={keys} manualKeys={manualKeys} onKeys={value => {
-              setManualKeys({ esri: value.esri.trim(), carto: value.carto.trim() });
+              setManualKeys({ esri: value.esri.trim(), carto: value.carto.trim(), tianditu: value.tianditu.trim() });
               setRetry(index => index + 1);
             }} onSelect={chooseBasemap} onStyle={setBaseStyle} onBoundary={setBoundaryStyle}
             onRetry={() => setRetry(index => index + 1)} onImportBoundary={() => openImport('boundary')} />}

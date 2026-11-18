@@ -1,11 +1,12 @@
 import type { ExpressionSpecification, LayerSpecification, StyleSpecification, SymbolLayerSpecification } from 'maplibre-gl';
 import type { BasemapGroup, BasemapId, BasemapStyle, TextStyle } from '../model';
+import { tiandituLabelLayer, tiandituStyle } from './tianditu';
 
 export interface CatalogStyle {
   id: BasemapId;
   name: string;
   theme: string;
-  provider: 'esri' | 'carto' | 'open';
+  provider: 'esri' | 'carto' | 'tianditu' | 'open';
   slug: string;
   dark: boolean;
 }
@@ -19,6 +20,7 @@ export const BASEMAPS: CatalogStyle[] = [
   { id: 'carto-voyager', name: '彩色街道', theme: 'Voyager', provider: 'carto', slug: 'voyager', dark: false },
   { id: 'open-light', name: '开放浅色', theme: 'Positron', provider: 'open', slug: 'positron', dark: false },
   { id: 'open-dark', name: '开放深色', theme: 'Dark', provider: 'open', slug: 'dark', dark: true },
+  { id: 'tianditu-vector', name: '矢量底图', theme: 'WMTS', provider: 'tianditu', slug: 'vec', dark: false },
 ];
 
 export const GROUPS: { id: BasemapGroup; label: string }[] = [
@@ -33,12 +35,13 @@ export const EMPTY_STYLE: StyleSpecification = {
   version: 8, sources: {},
   layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#eef0ed' } }],
 };
-export interface ProviderKeys { esri: string; carto: string }
-export const providerName = { esri: 'Esri', carto: 'CARTO', open: '开放预览' };
+export interface ProviderKeys { esri: string; carto: string; tianditu: string }
+export const providerName = { esri: 'Esri', carto: 'CARTO', tianditu: '天地图', open: '开放预览' };
+export const providerCredential = { esri: 'Esri API key', carto: 'CARTO API key', tianditu: '天地图 tk' };
 const openAttribution = '<a href="https://openfreemap.org/">OpenFreeMap</a> © <a href="https://www.openmaptiles.org/">OpenMapTiles</a> Data from <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
 
 export function findBasemap(id: BasemapId): CatalogStyle {
-  return BASEMAPS.find(item => item.id === id) ?? BASEMAPS[6];
+  return BASEMAPS.find(item => item.id === id) ?? BASEMAPS.find(item => item.id === 'open-light')!;
 }
 
 function styleUrl(entry: CatalogStyle, keys: ProviderKeys): URL {
@@ -67,8 +70,9 @@ function addKey(value: string, relativeTo: URL, entry: CatalogStyle, keys: Provi
 
 export async function fetchBasemap(entry: CatalogStyle, keys: ProviderKeys, signal: AbortSignal): Promise<StyleSpecification> {
   if (entry.provider !== 'open' && !keys[entry.provider]) {
-    throw new Error(`请在底图凭据中填写 ${providerName[entry.provider]} API key。`);
+    throw new Error(`请在底图凭据中填写 ${providerCredential[entry.provider]}。`);
   }
+  if (entry.provider === 'tianditu') return tiandituStyle(keys.tianditu);
   const url = styleUrl(entry, keys);
   const response = await fetch(url, { signal, credentials: 'omit' });
   const style = await response.json().catch(() => null);
@@ -271,6 +275,14 @@ function tuneOpenLabels(layer: SymbolLayerSpecification, density: number) {
 }
 
 export function styleBasemap(original: StyleSpecification, entry: CatalogStyle, settings: BasemapStyle): StyleSpecification {
+  if (entry.provider === 'tianditu') {
+    return {
+      ...original,
+      layers: original.layers.map(layer => layer.id === tiandituLabelLayer
+        ? { ...layer, layout: { ...layer.layout, visibility: settings.labels ? 'visible' : 'none' } }
+        : layer),
+    };
+  }
   let textFields = layerTextCache.get(original);
   if (!textFields) {
     textFields = new Map(original.layers.flatMap(layer => isBasemapLabel(layer)
@@ -348,7 +360,7 @@ export function styleBasemap(original: StyleSpecification, entry: CatalogStyle, 
 export function attributionText(style: StyleSpecification): string[] {
   const labels = new Set<string>();
   for (const source of Object.values(style.sources)) {
-    if (source.type === 'vector' && source.attribution) {
+    if ((source.type === 'vector' || source.type === 'raster') && source.attribution) {
       const document = new DOMParser().parseFromString(source.attribution, 'text/html');
       labels.add((document.body.textContent || '').trim());
     }

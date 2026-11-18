@@ -276,3 +276,46 @@ dialog::backdrop { background: #102535a6; }
 .preview-tools p { font-size: 11px; color: var(--muted); }
 .export-panel { max-height: calc(100dvh - 94px); overflow-y: auto; }
 @media (max-width: 690px) { .export-panel { max-height: none; } }
+
+.layer-hint { color: var(--muted); font-size: 12px; line-height: 1.6; }
+
+.sheet-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 0;
+}
+.paper-tools {
+  flex: 0 0 39px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 4px 9px;
+  color: #304957;
+  background: #e8eef0;
+  border-bottom: 1px solid #c3d1d6;
+}
+.paper-tools output { min-width: 46px; text-align: center; font-size: 12px; font-variant-numeric: tabular-nums; }
+.paper-tools > span { margin-left: 6px; font-size: 11px; color: #4b6674; }
+.paper-viewport {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  padding: 14px;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+}
+.paper-viewport.panning { cursor: grabbing; }
+.paper-viewport:focus-visible { outline: 2px solid #1e7a94; outline-offset: -2px; }
+.paper-viewport .sheet-background { max-height: min(62vh, 560px); }
+.paper-viewport .paper-stage { transform-origin: center; }
+.preview-stale { pointer-events: none; z-index: 3; }
+@media (max-width: 690px) {
+  .paper-viewport .sheet-background { max-height: 46vh; }
+  .paper-viewport { min-height: 200px; }
+}
