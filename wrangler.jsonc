@@ -1,0 +1,25 @@
+{
+  "name": "cy-industrial-parks-mapping",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-11-18",
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "secrets": {
+    "required": ["WORKSPACE_PASSCODE", "WORKSPACE_SESSION_KEY"]
+  },
+  "ratelimits": [
+    {
+      "name": "LOGIN_RATE_LIMIT",
+      "namespace_id": "839124602",
+      "simple": { "limit": 8, "period": 60 }
+    }
+  ],
+  "observability": {
+    "enabled": false
+  }
+}
