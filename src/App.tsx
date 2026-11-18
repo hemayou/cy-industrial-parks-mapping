@@ -21,6 +21,8 @@ import type { ProjectFile, ProjectLayer } from './project';
 type Tab = 'base' | 'layers' | 'layout';
 const openedMap = findBasemap('open-light');
 const defaultBoundaryPath = '/data/chaoyang-osm.geojson';
+const boundaryLayerId = 'cy-district-style';
+const emptyKeys: ProviderKeys = { esri: '', carto: '' };
 const tabs = [{ id: 'base', label: '底图', icon: MapIcon }, { id: 'layers', label: '图层', icon: Layers3 }, { id: 'layout', label: '版式', icon: PanelTop }] as const;
 
 async function assetGeoJson(path: string, label: string) {
@@ -81,7 +83,9 @@ export function App() {
   const [tab, setTab] = useState<Tab>('base');
   const [selected, setSelected] = useState(openedMap);
   const [loaded, setLoaded] = useState<{ entry: CatalogStyle; raw: StyleSpecification }>({ entry: openedMap, raw: EMPTY_STYLE });
-  const [keys, setKeys] = useState<ProviderKeys>({ esri: '', carto: '' });
+  const [manualKeys, setManualKeys] = useState<ProviderKeys>(emptyKeys);
+  const [managedKeys, setManagedKeys] = useState<ProviderKeys>(emptyKeys);
+  const keys = { esri: manualKeys.esri || managedKeys.esri, carto: manualKeys.carto || managedKeys.carto };
   const [load, setLoad] = useState<'loading' | 'ready' | 'failed' | 'key'>('loading');
   const [retry, setRetry] = useState(0);
   const [baseStyle, setBaseStyle] = useState<BasemapStyle>(structuredClone(DEFAULT_BASEMAP));
@@ -118,7 +122,23 @@ export function App() {
       if (allowInitialLayers.current) setLayers(current => current.length ? current : initial.layers);
     }).catch(error => setProblems(previous => [...previous, error.message]));
 
-    return () => worker.current?.terminate();
+    const controller = new AbortController();
+    fetch('/_workspace/basemap-keys', {
+      signal: controller.signal,
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+    }).then(async response => {
+      if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) return;
+      const values = await response.json();
+      setManagedKeys({
+        esri: typeof values?.esri === 'string' ? values.esri.trim() : '',
+        carto: typeof values?.carto === 'string' ? values.carto.trim() : '',
+      });
+    }).catch(() => {});
+    return () => {
+      controller.abort();
+      worker.current?.terminate();
+    };
   }, []);
 
   const relevantKey = selected.provider === 'open' ? '' : keys[selected.provider];
@@ -347,13 +367,16 @@ export function App() {
         </nav>
         <div className="panel">
           {tab === 'base' && <BasemapPanel current={selected} raw={loaded.raw} style={baseStyle} boundary={boundaryStyle}
-            keys={keys} onKeys={value => {
-              setKeys({ esri: value.esri.trim(), carto: value.carto.trim() });
+            keys={keys} manualKeys={manualKeys} onKeys={value => {
+              setManualKeys({ esri: value.esri.trim(), carto: value.carto.trim() });
               setRetry(index => index + 1);
             }} onSelect={chooseBasemap} onStyle={setBaseStyle} onBoundary={setBoundaryStyle}
             onRetry={() => setRetry(index => index + 1)} onImportBoundary={() => openImport('boundary')} />}
           {tab === 'layers' && <LayerPanel layers={layers} active={active} importing={importing} managed={managed}
             onImport={() => openImport('layers')} onRestore={() => void loadInitialLayers()} onSelect={setActiveId}
+            boundary={boundaryStyle} boundaryActive={activeId === boundaryLayerId}
+            onSelectBoundary={() => setActiveId(boundaryLayerId)} onBoundary={setBoundaryStyle}
+            onReplaceBoundary={() => openImport('boundary')}
             onUpdate={value => setLayers(current => current.map(item => item.id === value.id ? value : item))}
             onRemove={id => { allowInitialLayers.current = false; setLayers(current => current.filter(layer => layer.id !== id)); }} />}
           {tab === 'layout' && <LayoutPanel layout={layout} layers={layers} output={output} onLayout={setLayout} onOutput={setOutput} />}

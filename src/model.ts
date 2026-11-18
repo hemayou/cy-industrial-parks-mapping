@@ -6,6 +6,7 @@ export type FontFamily = 'Noto Sans SC' | 'Noto Serif SC';
 export type Shape = 'circle' | 'square' | 'diamond' | 'triangle';
 export type Corner = 'tl' | 'tr' | 'bl' | 'br';
 export type LineStyle = 'solid' | 'dashed' | 'dotted';
+export type PointLabelPlacement = 'auto' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw';
 export type BasemapId = 'open-light' | 'open-dark' | 'esri-light' | 'esri-dark' | 'esri-streets' | 'carto-light' | 'carto-dark' | 'carto-voyager';
 export type BasemapGroup = 'roads' | 'water' | 'green' | 'buildings' | 'boundaries' | 'transport' | 'places' | 'shops' | 'other';
 
@@ -16,6 +17,13 @@ export interface TextStyle {
   color: string;
   halo: string;
   haloWidth: number;
+}
+
+export interface PointLabelStyle {
+  maxLines: number;
+  align: 'left' | 'center' | 'right';
+  lineHeight: number;
+  placement: PointLabelPlacement;
 }
 
 export interface PointStyle {
@@ -41,6 +49,7 @@ export interface LayerStyle {
   numberField: string;
   areaColorField: string;
   text: TextStyle;
+  pointLabel: PointLabelStyle;
   point: PointStyle;
   area: AreaStyle;
   categories: Record<string, Partial<PointStyle>>;
@@ -78,6 +87,7 @@ export interface BasemapStyle {
 export interface BoundaryStyle {
   visible: boolean;
   color: string;
+  opacity: number;
   width: number;
   line: LineStyle;
 }
@@ -136,6 +146,7 @@ export const DEFAULT_TEXT: TextStyle = {
 export const DEFAULT_LAYER: LayerStyle = {
   visible: true, labelField: '', categoryField: '', numberField: '', areaColorField: '',
   text: { ...DEFAULT_TEXT, size: 16, color: '#202528', haloWidth: 1.65 },
+  pointLabel: { maxLines: 1, align: 'center', lineHeight: 1.2, placement: 'auto' },
   point: { shape: 'circle', size: 12, color: '#bd412e', stroke: '#ffffff', strokeWidth: 1.4 },
   area: { color: '#487ba1', opacity: 0.16, stroke: '#487ba1', width: 1.5, line: 'solid' },
   categories: {}, categoryOrder: [],
@@ -145,7 +156,7 @@ export const DEFAULT_BASEMAP: BasemapStyle = {
   groups: { shops: false, buildings: false }, layerVisibility: {}, labelDensity: {}, layerDensity: {},
   roadColor: '', roadColorMinor: '',
 };
-export const DEFAULT_BOUNDARY: BoundaryStyle = { visible: true, color: '#2d5569', width: 2.3, line: 'solid' };
+export const DEFAULT_BOUNDARY: BoundaryStyle = { visible: true, color: '#2d5569', opacity: 1, width: 2.3, line: 'solid' };
 export const DEFAULT_LAYOUT: Layout = {
   title: '朝阳区科技园区空间分布图', titleSubtitle: '', titleBackground: '#fcfbf8', titleFrame: null, titleVisible: true, titlePosition: 'tl',
   titleFont: 'Noto Serif SC', titleSize: 41, titleColor: '#182d42',

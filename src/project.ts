@@ -25,6 +25,8 @@ const isObject = (value: unknown): value is Values => !!value && typeof value ==
 const enumValues: Record<string, string[]> = {
   shape: ['circle', 'square', 'diamond', 'triangle'],
   line: ['solid', 'dashed', 'dotted'],
+  align: ['left', 'center', 'right'],
+  placement: ['auto', 'n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'],
   font: ['Noto Sans SC', 'Noto Serif SC'],
   titleFont: ['Noto Sans SC', 'Noto Serif SC'],
   legendFont: ['Noto Sans SC', 'Noto Serif SC'],
@@ -33,7 +35,7 @@ const enumValues: Record<string, string[]> = {
 };
 const colorKeys = /^(color|halo|stroke|\w*Color\w*|\w*Background)$/;
 const rangeByKey: Record<string, [number, number]> = {
-  size: [1, 72], strokeWidth: [0, 8], haloWidth: [0, 6], opacity: [0, 1], legendColumns: [1, 6],
+  maxLines: [1, 6], lineHeight: [.75, 2.5], size: [1, 72], strokeWidth: [0, 8], haloWidth: [0, 6], opacity: [0, 1], legendColumns: [1, 6],
   titleSize: [8, 125], legendSize: [6, 60], legendSymbolSize: [5, 60], northSize: [14, 100],
   dpi: [36, 1200], paperWidth: [30, 2500], paperHeight: [30, 2500],
 };
@@ -49,7 +51,7 @@ function patch<Defaults extends object>(base: Defaults, value: unknown): Default
     }
     if (typeof initial === 'number' && typeof next === 'number' && Number.isFinite(next)) {
       const [min, max] = rangeByKey[key] ?? [0, 16384];
-      return [key, Math.max(min, Math.min(max, next))];
+      return [key, Math.max(min, Math.min(max, key === 'maxLines' ? Math.round(next) : next))];
     }
     if (typeof initial === 'boolean' && typeof next === 'boolean') return [key, next];
     if (Array.isArray(initial) && Array.isArray(next)) return [key, next.filter(item => typeof item === 'string').slice(0, 2000)];

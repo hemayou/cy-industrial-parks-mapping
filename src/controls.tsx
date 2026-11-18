@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { Corner, FontFamily, LineStyle, TextStyle } from './model';
+import type { BoundaryStyle, Corner, FontFamily, LineStyle, TextStyle } from './model';
 
 export function Section({ title, children, compact = false }: { title: string; children: ReactNode; compact?: boolean }) {
   return <section className={compact ? 'section compact' : 'section'}><h2>{title}</h2>{children}</section>;
@@ -77,4 +77,24 @@ export function TextControls({ value, onChange }: { value: TextStyle; onChange: 
       <div className="align-end"><Toggle checked={value.bold} onChange={bold => set({ bold })}>加粗</Toggle></div>
     </div>
   </div>;
+}
+
+
+export function BoundaryControls({ value, onChange, onReplace }: {
+  value: BoundaryStyle; onChange: (value: BoundaryStyle) => void; onReplace: () => void;
+}) {
+  const set = (patch: Partial<BoundaryStyle>) => onChange({ ...value, ...patch });
+  return <Section title="朝阳区行政区界">
+    <Toggle checked={value.visible} onChange={visible => set({ visible })}>显示区界</Toggle>
+    <div className="fields two">
+      <Color label="区界颜色" value={value.color} onChange={color => set({ color })} />
+      <Field label="不透明度（%）"><NumberInput value={Math.round(value.opacity * 100)}
+        onChange={percent => set({ opacity: Math.min(1, Math.max(0, percent / 100)) })} /></Field>
+    </div>
+    <div className="fields two">
+      <Field label="线宽"><NumberInput value={value.width} min={0.5} max={12} step={0.1} onChange={width => set({ width })} /></Field>
+      <Field label="线型"><LineSelect value={value.line} onChange={line => set({ line })} /></Field>
+    </div>
+    <button className="text-button" type="button" onClick={onReplace}>替换区界文件</button>
+  </Section>;
 }

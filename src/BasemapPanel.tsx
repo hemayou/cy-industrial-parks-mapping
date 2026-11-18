@@ -4,11 +4,11 @@ import type { StyleSpecification } from 'maplibre-gl';
 import type { BasemapGroup, BasemapStyle, BoundaryStyle } from './model';
 import { BASEMAPS, GROUPS, baseLayerGroup, groupLabelDensity, isBasemapLabel, labelLayerDensity, providerName } from './map/basemap';
 import type { CatalogStyle, ProviderKeys } from './map/basemap';
-import { Color, Field, LineSelect, NumberInput, Section, Select, TextControls, Toggle } from './controls';
+import { BoundaryControls, Color, Field, Section, Select, TextControls, Toggle } from './controls';
 
 interface Props {
   current: CatalogStyle; raw: StyleSpecification; style: BasemapStyle; boundary: BoundaryStyle;
-  keys: ProviderKeys; onKeys: (keys: ProviderKeys) => void; onSelect: (entry: CatalogStyle) => void;
+  keys: ProviderKeys; manualKeys: ProviderKeys; onKeys: (keys: ProviderKeys) => void; onSelect: (entry: CatalogStyle) => void;
   onStyle: (style: BasemapStyle) => void; onBoundary: (style: BoundaryStyle) => void;
   onRetry: () => void; onImportBoundary: () => void;
 }
@@ -22,8 +22,8 @@ function DensitySlider({ label, value, onChange }: { label: string; value: numbe
 }
 
 export function BasemapPanel(props: Props) {
-  const { current, raw, style, boundary, keys, onKeys, onSelect, onStyle, onBoundary, onRetry } = props;
-  const [draft, setDraft] = useState(keys);
+  const { current, raw, style, boundary, keys, manualKeys, onKeys, onSelect, onStyle, onBoundary, onRetry } = props;
+  const [draft, setDraft] = useState(manualKeys);
   const [credentials, setCredentials] = useState(false);
   const [advanced, setAdvanced] = useState<BasemapGroup>('roads');
   const groups = useMemo(() => {
@@ -72,8 +72,10 @@ export function BasemapPanel(props: Props) {
       </button>
       {credentials && <form className="credentials" onSubmit={event => { event.preventDefault(); onKeys(draft); }}>
         <Field label="Esri API key"><input type="password" value={draft.esri} autoComplete="off"
+          placeholder={keys.esri ? '工作台已配置' : '输入 Esri API key'}
           onChange={event => setDraft({ ...draft, esri: event.currentTarget.value })} /></Field>
         <Field label="CARTO API key"><input type="password" value={draft.carto} autoComplete="off"
+          placeholder={keys.carto ? '工作台已配置' : '输入 CARTO API key'}
           onChange={event => setDraft({ ...draft, carto: event.currentTarget.value })} /></Field>
         <div className="button-row"><button className="button secondary" type="submit">应用凭据</button>
           <button type="button" className="button quiet" onClick={onRetry}><RotateCcw size={14} /> 重试连接</button></div>
@@ -127,14 +129,6 @@ export function BasemapPanel(props: Props) {
         </div>
       </details>
     </Section>
-    <Section title="朝阳区行政区界">
-      <Toggle checked={boundary.visible} onChange={visible => onBoundary({ ...boundary, visible })}>显示区界</Toggle>
-      <div className="fields two">
-        <Color label="区界颜色" value={boundary.color} onChange={color => onBoundary({ ...boundary, color })} />
-        <Field label="线宽"><NumberInput value={boundary.width} min={0.5} max={12} step={0.1} onChange={width => onBoundary({ ...boundary, width })} /></Field>
-      </div>
-      <Field label="区界线型"><LineSelect value={boundary.line} onChange={line => onBoundary({ ...boundary, line })} /></Field>
-      <button className="text-button" type="button" onClick={props.onImportBoundary}>替换区界文件</button>
-    </Section>
+    <BoundaryControls value={boundary} onChange={onBoundary} onReplace={props.onImportBoundary} />
   </>;
 }

@@ -3,9 +3,12 @@ interface Env {
   LOGIN_RATE_LIMIT: { limit(options: { key: string }): Promise<{ success: boolean }> };
   WORKSPACE_PASSCODE?: string;
   WORKSPACE_SESSION_KEY?: string;
+  ESRI_BROWSER_API_KEY?: string;
+  CARTO_BROWSER_API_KEY?: string;
 }
 
 const loginPath = '/_workspace/login';
+const basemapKeysPath = '/_workspace/basemap-keys';
 const cookieName = '__Host-cy-workspace';
 const sessionSeconds = 4 * 60 * 60;
 const encoder = new TextEncoder();
@@ -209,6 +212,22 @@ export default {
     }
 
     if (await validSession(request, passcode, secret)) {
+      if (url.pathname === basemapKeysPath) {
+        const headers = {
+          ...privateHeaders,
+          'Content-Type': 'application/json; charset=utf-8',
+          'Cross-Origin-Resource-Policy': 'same-origin',
+        };
+        if (request.method !== 'GET' && request.method !== 'HEAD') {
+          return new Response(null, { status: 405, headers: { ...headers, Allow: 'GET, HEAD' } });
+        }
+        const body = request.method === 'HEAD' ? null : JSON.stringify({
+          esri: env.ESRI_BROWSER_API_KEY ?? '',
+          carto: env.CARTO_BROWSER_API_KEY ?? '',
+        });
+        return new Response(body, { headers });
+      }
+
       const asset = await env.ASSETS.fetch(request);
       const response = new Response(asset.body, asset);
       response.headers.set('Cache-Control', privateHeaders['Cache-Control']);

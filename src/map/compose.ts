@@ -4,6 +4,7 @@ import { categoryKey, categoryRows, numberedRows } from '../model';
 import { fontStack } from './basemap';
 import { mapFontFaces } from './fonts';
 import { markerId } from './markers';
+import { formatPointLabel, pointLabelLayout } from './pointLabels';
 
 export function lineDash(line: LineStyle) {
   if (line === 'dashed') return [3, 2];
@@ -36,6 +37,7 @@ const FIELD_SYMBOL = '__cy_symbol';
 const FIELD_SIZE = '__cy_size';
 const FIELD_NUMBER = '__cy_number';
 const FIELD_NUMBER_COLOR = '__cy_num_color';
+const FIELD_POINT_LABEL = '__cy_point_label';
 const FIELD_FILL = '__cy_fill';
 
 export interface PlotOptions {
@@ -96,6 +98,8 @@ function layerSources(overlays: DataLayer[], numberedLayerId: string | undefined
             ...feature.properties,
             [FIELD_SYMBOL]: markerId(marker), [FIELD_SIZE]: marker.size,
             [FIELD_NUMBER]: number ?? '', [FIELD_NUMBER_COLOR]: readableInk(paint.color),
+            [FIELD_POINT_LABEL]: layer.style.labelField
+              ? formatPointLabel(feature.properties?.[layer.style.labelField], layer.style.pointLabel.maxLines) : '',
           },
         };
       }),
@@ -121,7 +125,8 @@ export function composeStyle({ base, overlays, boundary, boundaryStyle, layout }
       shapes.push(
         { id: `${id}-fill`, type: 'fill', source: id, filter: byType('Polygon'),
           paint: { 'fill-color': ['get', FIELD_FILL], 'fill-opacity': area.opacity } },
-        { id: `${id}-outline`, type: 'line', source: id, filter: byType('Polygon'), paint: linePaint },
+        { id: `${id}-outline`, type: 'line', source: id, filter: byType('Polygon'),
+          layout: { 'line-join': 'round' }, paint: linePaint },
       );
     }
     if (layer.kinds.line) shapes.push({ id: `${id}-line`, type: 'line', source: id, filter: byType('LineString'), paint: linePaint });
@@ -139,7 +144,16 @@ export function composeStyle({ base, overlays, boundary, boundaryStyle, layout }
       const labelText: ExpressionSpecification = ['to-string', ['coalesce', ['get', labelField], '']];
       if (layer.kinds.area) symbols.push(labels(`${id}-area-label`, id, text, labelText, 'Polygon'));
       if (layer.kinds.line) symbols.push(labels(`${id}-line-label`, id, text, labelText, 'LineString'));
-      if (layer.kinds.point && numbered !== layer.id) symbols.push(labels(`${id}-point-label`, id, text, labelText, 'Point'));
+      if (layer.kinds.point && numbered !== layer.id) {
+        symbols.push({
+          id: `${id}-point-label`, type: 'symbol', source: id, filter: byType('Point'),
+          layout: {
+            ...pointLabelLayout(layer.style.pointLabel),
+            'text-field': ['get', FIELD_POINT_LABEL], 'text-font': fontStack(text), 'text-size': text.size,
+          },
+          paint: { 'text-color': text.color, 'text-halo-color': text.halo, 'text-halo-width': text.haloWidth },
+        });
+      }
     }
     if (numbered === layer.id && layer.kinds.point) {
       symbols.push({
@@ -159,7 +173,7 @@ export function composeStyle({ base, overlays, boundary, boundaryStyle, layout }
     shapes.push({
       id: 'cy-district-line', type: 'line', source: 'cy-district',
       layout: { 'line-cap': 'round', 'line-join': 'round' },
-      paint: { 'line-color': boundaryStyle.color, 'line-width': boundaryStyle.width, ...(dash ? { 'line-dasharray': dash } : {}) },
+      paint: { 'line-color': boundaryStyle.color, 'line-opacity': boundaryStyle.opacity, 'line-width': boundaryStyle.width, ...(dash ? { 'line-dasharray': dash } : {}) },
     });
   }
   const baseShapes = base.layers.filter(layer => layer.type !== 'symbol');

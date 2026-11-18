@@ -1,7 +1,7 @@
-import { ArrowDown, ArrowUp, Eye, EyeOff, FileUp, Layers2, Trash2 } from 'lucide-react';
-import type { DataLayer, PointStyle, Shape } from './model';
+import { ArrowDown, ArrowUp, Eye, EyeOff, FileUp, Layers2, Map as MapIcon, Trash2 } from 'lucide-react';
+import type { BoundaryStyle, DataLayer, PointLabelPlacement, PointLabelStyle, PointStyle, Shape } from './model';
 import { categoryRows } from './model';
-import { Color, Field, LineSelect, NumberInput, Section, Select, TextControls } from './controls';
+import { BoundaryControls, Color, Field, LineSelect, NumberInput, Section, Select, TextControls } from './controls';
 
 const shapes = [
   { value: 'circle', label: '圆形' }, { value: 'square', label: '方形' },
@@ -24,13 +24,43 @@ function MarkerControls({ point, onChange }: { point: PointStyle; onChange: (val
   </div>;
 }
 
+const pointPlacements: { value: PointLabelPlacement; label: string }[] = [
+  { value: 'auto', label: '自动避让' },
+  { value: 'n', label: '上方' }, { value: 'ne', label: '右上' }, { value: 'e', label: '右侧' }, { value: 'se', label: '右下' },
+  { value: 's', label: '下方' }, { value: 'sw', label: '左下' }, { value: 'w', label: '左侧' }, { value: 'nw', label: '左上' },
+];
+const textAlignments = [{ value: 'left', label: '左对齐' }, { value: 'center', label: '居中' }, { value: 'right', label: '右对齐' }];
+const lineOptions = Array.from({ length: 6 }, (_, index) => ({ value: String(index + 1), label: index ? `最多 ${index + 1} 行` : '单行' }));
+
+function PointLabelControls({ value, onChange }: { value: PointLabelStyle; onChange: (next: PointLabelStyle) => void }) {
+  const set = (patch: Partial<PointLabelStyle>) => onChange({ ...value, ...patch });
+  return <div className="control-stack">
+    <div className="fields two">
+      <Field label="园区点名行数"><Select choices={lineOptions} value={String(value.maxLines)} onChange={rows => set({ maxLines: Number(rows) })} /></Field>
+      <Field label="标注相对点位"><Select choices={pointPlacements} value={value.placement}
+        onChange={placement => set({ placement: placement as PointLabelPlacement })} /></Field>
+    </div>
+    {value.maxLines > 1 && <div className="fields two">
+      <Field label="多行对齐"><Select choices={textAlignments} value={value.align}
+        onChange={align => set({ align: align as PointLabelStyle['align'] })} /></Field>
+      <Field label="行距（倍）"><NumberInput value={value.lineHeight} min={.75} max={2.5} step={.05}
+        onChange={lineHeight => set({ lineHeight })} /></Field>
+    </div>}
+  </div>;
+}
+
 interface Props {
   layers: DataLayer[]; active: DataLayer | undefined; importing: boolean; managed: boolean;
+  boundary: BoundaryStyle; boundaryActive: boolean;
+  onSelectBoundary: () => void; onBoundary: (value: BoundaryStyle) => void; onReplaceBoundary: () => void;
   onImport: () => void; onRestore: () => void; onSelect: (id: string) => void;
   onUpdate: (layer: DataLayer) => void; onRemove: (id: string) => void;
 }
 
-export function LayerPanel({ layers, active, importing, managed, onImport, onRestore, onSelect, onUpdate, onRemove }: Props) {
+export function LayerPanel({
+  layers, active, importing, managed, onImport, onRestore, onSelect, onUpdate, onRemove,
+  boundary, boundaryActive, onSelectBoundary, onBoundary, onReplaceBoundary,
+}: Props) {
   const change = (patch: Partial<DataLayer['style']>) => active && onUpdate({ ...active, style: { ...active.style, ...patch } });
   const fieldChoices = [{ value: '', label: '选择字段' }, ...active?.fields.map(field => ({ value: field, label: field })) ?? []];
   const rows = active?.kinds.point && active.style.categoryField ? categoryRows(active) : [];
@@ -63,12 +93,25 @@ export function LayerPanel({ layers, active, importing, managed, onImport, onRes
             <button type="button" className="icon-button" title="移除图层" aria-label={`移除${layer.name}`}
               onClick={() => onRemove(layer.id)}><Trash2 size={15} /></button>
           </div>)}
+        <div className={`dataset ${boundaryActive ? 'active' : ''}`}>
+          <button type="button" className="dataset-name" aria-pressed={boundaryActive} onClick={onSelectBoundary}>
+            <MapIcon size={15} /><span><strong>朝阳区行政区界</strong><small>成图范围</small></span>
+          </button>
+          <button type="button" className="icon-button" title={boundary.visible ? '隐藏区界' : '显示区界'}
+            aria-label={boundary.visible ? '隐藏朝阳区行政区界' : '显示朝阳区行政区界'}
+            onClick={() => onBoundary({ ...boundary, visible: !boundary.visible })}>
+            {boundary.visible ? <Eye size={16} /> : <EyeOff size={16} />}
+          </button>
+        </div>
       </div>
     </Section>
-    {active && <>
+    {boundaryActive && <BoundaryControls value={boundary} onChange={onBoundary} onReplace={onReplaceBoundary} />}
+    {active && !boundaryActive && <>
       <Section title="标注">
         <Field label="名称字段"><Select value={active.style.labelField} choices={fieldChoices} onChange={labelField => change({ labelField })} /></Field>
         {active.style.labelField && <TextControls value={active.style.text} onChange={text => change({ text })} />}
+        {active.style.labelField && active.kinds.point && <PointLabelControls value={active.style.pointLabel}
+          onChange={pointLabel => change({ pointLabel })} />}
       </Section>
       {active.kinds.point && <Section title="点样式">
         <Field label="分类字段"><Select value={active.style.categoryField} choices={fieldChoices}
