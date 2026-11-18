@@ -51,14 +51,27 @@ const directions: Record<Fixed, [number, number]> = {
   s: [0, 1], sw: [-1, 1], w: [-1, 0], nw: [-1, -1],
 };
 const automaticOrder: Fixed[] = ['ne', 'e', 'n', 'se', 's', 'nw', 'w', 'sw'];
+const nearDirections = automaticOrder.map(direction => directions[direction]);
+const leaderDirections: [number, number][] = [
+  ...nearDirections,
+  [1, -.33], [1, .33], [-1, -.33], [-1, .33],
+  [1, -.66], [1, .66], [-1, -.66], [-1, .66],
+  [-.33, -1], [.33, -1], [-.33, 1], [.33, 1],
+  [-.66, -1], [.66, -1], [-.66, 1], [.66, 1],
+];
 
 export interface PointLabelMark {
   source: string;
+  layerId: string;
+  key: string;
   index: number;
   coordinate: [number, number];
   radius: number;
   label?: { lines: string[]; style: TextStyle; layout: PointLabelStyle };
+  offset?: [number, number];
 }
+
+export function pointLabelId(mark: PointLabelMark) { return mark.source + ':' + mark.key; }
 
 type Pixel = { x: number; y: number };
 export type LabelRect = { left: number; top: number; right: number; bottom: number };
@@ -83,7 +96,8 @@ export interface PlacedPointLabel {
   mark: MeasuredMark;
   label: MeasuredLabel;
   box: LabelRect;
-  leader?: Leader;
+  leader?: Leader[];
+  manual: boolean;
 }
 
 function labelFont(style: TextStyle) {
@@ -129,20 +143,24 @@ function overlap(a: LabelRect, b: LabelRect) {
   return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
 }
 
-function cross(box: LabelRect, [start, end]: Leader) {
+function crossingInterval(box: LabelRect, [start, end]: Leader): [number, number] | null {
   let first = 0, last = 1;
   for (const [from, to, min, max] of [[start.x, end.x, box.left, box.right], [start.y, end.y, box.top, box.bottom]]) {
     const delta = to - from;
     if (!delta) {
-      if (from < min || from > max) return false;
+      if (from < min || from > max) return null;
       continue;
     }
     const enter = (min - from) / delta, exit = (max - from) / delta;
     first = Math.max(first, Math.min(enter, exit));
     last = Math.min(last, Math.max(enter, exit));
-    if (first > last) return false;
+    if (first > last) return null;
   }
-  return true;
+  return [first, last];
+}
+
+function cross(box: LabelRect, path: Leader) {
+  return crossingInterval(box, path) !== null;
 }
 
 function tiles(box: LabelRect, visit: (key: string) => boolean) {
@@ -178,14 +196,44 @@ function leaderBox([start, end]: Leader): LabelRect {
   };
 }
 
+function guidesCross(a: Leader, b: Leader) {
+  const side = (start: Pixel, end: Pixel, point: Pixel) =>
+    (end.x - start.x) * (point.y - start.y) - (end.y - start.y) * (point.x - start.x);
+  return overlap(leaderBox(a), leaderBox(b)) &&
+    side(a[0], a[1], b[0]) * side(a[0], a[1], b[1]) <= 0 &&
+    side(b[0], b[1], a[0]) * side(b[0], b[1], a[1]) <= 0;
+}
+
+// Leave gaps in a manually routed leader wherever it passes another point or label.
+function visibleLeaderSegments(path: Leader, obstacles: LabelRect[]): Leader[] {
+  const [from, to] = path;
+  const dx = to.x - from.x, dy = to.y - from.y;
+  const length = Math.hypot(dx, dy);
+  if (length < 1) return [path];
+  const clearance = 0.8 / length;
+  const intervals = obstacles.flatMap(box => {
+    const interval = crossingInterval(box, path);
+    return interval ? [[Math.max(0, interval[0] - clearance), Math.min(1, interval[1] + clearance)]] : [];
+  }).sort((a, b) => a[0] - b[0]);
+  const segments: Leader[] = [];
+  const at = (part: number) => ({ x: from.x + dx * part, y: from.y + dy * part });
+  let cursor = 0;
+  for (const [start, end] of intervals) {
+    if ((start - cursor) * length > 1) segments.push([at(cursor), at(start)]);
+    cursor = Math.max(cursor, end);
+  }
+  if ((1 - cursor) * length > 1) segments.push([at(cursor), to]);
+  return segments;
+}
+
 export function placePointLabels(
   marks: MeasuredMark[], project: (coordinate: [number, number]) => Pixel, view: LabelRect,
 ): PlacedPointLabel[] {
-  const boxes = new Map<string, LabelRect[]>();
-  function occupy(box: LabelRect) {
+  const boxes = new Map<string, { box: LabelRect; leader?: Leader }[]>();
+  function occupy(box: LabelRect, leader?: Leader) {
     tiles(box, key => {
       const bucket = boxes.get(key) ?? [];
-      bucket.push(box);
+      bucket.push({ box, leader });
       boxes.set(key, bucket);
       return false;
     });
@@ -199,23 +247,57 @@ export function placePointLabels(
     return mark.label && withinLabelRect(center, view) ? [{ mark, label: mark.label, center, marker, radius }] : [];
   });
   const placed: PlacedPointLabel[] = [];
+  type Candidate = (typeof pending)[number];
+  function place(candidate: Candidate, box: LabelRect, guided: boolean, manual = false) {
+    const { mark, label, center, marker, radius } = candidate;
+    if (box.left < view.left || box.right > view.right || box.top < view.top || box.bottom > view.bottom) return false;
+    if (tiles(box, key => boxes.get(key)?.some(existing =>
+      existing.leader ? cross(box, existing.leader) : overlap(box, existing.box)) ?? false)) return false;
+    let leader: Leader[] | undefined;
+    if (guided) {
+      const straight = leaderFor(center, radius, box);
+      const path = leaderBox(straight);
+      if (manual) {
+        const obstacles = new Set<LabelRect>();
+        tiles(path, key => {
+          for (const item of boxes.get(key) ?? []) {
+            if (!item.leader && item.box !== marker) obstacles.add(item.box);
+          }
+          return false;
+        });
+        leader = visibleLeaderSegments(straight, [...obstacles]);
+        if (!leader.length) return false;
+      } else {
+        if (tiles(path, key => boxes.get(key)?.some(existing => existing.box !== marker &&
+          (existing.leader ? guidesCross(straight, existing.leader) : cross(existing.box, straight))) ?? false)) return false;
+        leader = [straight];
+      }
+      for (const segment of leader) occupy(leaderBox(segment), segment);
+    }
+    occupy(box);
+    placed.push({ mark, label, box, leader, manual });
+    return true;
+  }
+
+  pending = pending.filter(candidate => {
+    const { mark, center, label } = candidate;
+    if (!mark.offset) return true;
+    const left = center.x + mark.offset[0] - label.width / 2;
+    const top = center.y + mark.offset[1] - label.height / 2;
+    return !place(candidate, { left, top, right: left + label.width, bottom: top + label.height }, true, true);
+  });
+  pending.sort((a, b) => a.label.width * a.label.height - b.label.width * b.label.height);
+
   // Give every location a chance at an adjacent label before using space for leader lines.
-  for (const gap of [3, 10, 17, 24, 31]) {
-    pending = pending.filter(({ mark, label, center, marker, radius }) => {
-      const order = label.layout.placement === 'auto' ? automaticOrder : [label.layout.placement];
+  for (const extension of [0, 7, 12, 17, 22, 29, 37, 45, 53, 62, 71, 80, 94, 118, 144, 160]) {
+    pending = pending.filter(candidate => {
+      const { label, center, radius } = candidate;
+      if (extension > label.layout.leaderRange) return true;
+      const order = label.layout.placement === 'auto'
+        ? (extension ? leaderDirections : nearDirections) : [directions[label.layout.placement]];
       for (const direction of order) {
-        const box = candidateBox(center, label, radius + gap, directions[direction]);
-        if (box.left < view.left || box.right > view.right || box.top < view.top || box.bottom > view.bottom) continue;
-        if (tiles(box, key => boxes.get(key)?.some(existing => overlap(box, existing)) ?? false)) continue;
-        const leader = gap > 3 ? leaderFor(center, radius, box) : undefined;
-        if (leader) {
-          const path = leaderBox(leader);
-          if (tiles(path, key => boxes.get(key)?.some(existing => existing !== marker && cross(existing, leader)) ?? false)) continue;
-          occupy(path);
-        }
-        occupy(box);
-        placed.push({ mark, label, box, leader });
-        return false;
+        const box = candidateBox(center, label, radius + label.layout.gap + extension, direction);
+        if (place(candidate, box, extension > 0)) return false;
       }
       return true;
     });
@@ -230,10 +312,11 @@ export function paintPointLabels(context: CanvasRenderingContext2D, labels: Plac
   context.lineJoin = 'round';
   for (const { leader, label } of labels) {
     if (!leader) continue;
-    const [start, end] = leader;
     context.beginPath();
-    context.moveTo(start.x, start.y);
-    context.lineTo(end.x, end.y);
+    for (const [start, end] of leader) {
+      context.moveTo(start.x, start.y);
+      context.lineTo(end.x, end.y);
+    }
     context.strokeStyle = label.style.halo;
     context.lineWidth = 2.2;
     context.stroke();

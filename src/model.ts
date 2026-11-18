@@ -26,6 +26,9 @@ export interface PointLabelStyle {
   align: 'left' | 'center' | 'right';
   lineHeight: number;
   placement: PointLabelPlacement;
+  gap: number;
+  leaderRange: number;
+  offsets: Record<string, [number, number]>;
 }
 
 export interface PointStyle {
@@ -158,7 +161,7 @@ export const DEFAULT_TEXT: TextStyle = {
 export const DEFAULT_LAYER: LayerStyle = {
   visible: true, labelField: '', categoryField: '', numberField: '', areaColorField: '',
   text: { ...DEFAULT_TEXT, size: 16, color: '#202528', haloWidth: 1.65 },
-  pointLabel: { maxLines: 1, align: 'center', lineHeight: 1.2, placement: 'auto' },
+  pointLabel: { maxLines: 1, align: 'center', lineHeight: 1.2, placement: 'auto', gap: 1, leaderRange: 80, offsets: {} },
   point: { shape: 'circle', size: 12, color: '#bd412e', stroke: '#ffffff', strokeWidth: 1.4 },
   area: { color: '#487ba1', opacity: 0.16, stroke: '#487ba1', width: 1.5, line: 'solid' },
   categoryPalette: 'classic', categories: {}, categoryOrder: [],

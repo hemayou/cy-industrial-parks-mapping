@@ -47,6 +47,11 @@ function PointLabelControls({ value, onChange }: { value: PointLabelStyle; onCha
       <Field label="行距（倍）"><NumberInput value={value.lineHeight} min={.75} max={2.5} step={.05}
         onChange={lineHeight => set({ lineHeight })} /></Field>
     </div>}
+    <div className="fields two">
+      <Field label="标注间距（像素）"><NumberInput value={value.gap} min={0} max={25} step={0.5} onChange={gap => set({ gap })} /></Field>
+      <Field label="引线范围（像素）"><NumberInput value={value.leaderRange} min={20} max={160} step={5}
+        onChange={leaderRange => set({ leaderRange })} /></Field>
+    </div>
   </div>;
 }
 

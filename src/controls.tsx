@@ -20,7 +20,7 @@ export function Select({ value, onChange, choices }: {
 export function NumberInput({ value, min = 0, max = 100, step = 1, onChange }: {
   value: number; min?: number; max?: number; step?: number; onChange: (value: number) => void;
 }) {
-  return <input type="number" min={min} max={max} step={step} value={value || ''} onChange={event => {
+  return <input type="number" min={min} max={max} step={step} value={value === 0 && min > 0 ? '' : value} onChange={event => {
     const next = event.currentTarget.valueAsNumber;
     onChange(Number.isFinite(next) ? next : 0);
   }} onBlur={() => {

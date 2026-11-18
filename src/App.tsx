@@ -419,7 +419,14 @@ export function App() {
         </div>
       </aside>
       <MapCanvas scene={scene} bounds={bounds} layers={layers} notice={mapNotice} status={status}
-        example={example} sidebarCollapsed={sidebarCollapsed} onFailure={() => setTileFailed(true)} />
+        example={example} sidebarCollapsed={sidebarCollapsed} onFailure={() => setTileFailed(true)}
+        onPlaceLabel={(mark, offset) => setLayers(current => current.map(layer => {
+          if (layer.id !== mark.layerId) return layer;
+          const offsets = { ...layer.style.pointLabel.offsets };
+          if (offset) offsets[mark.key] = offset;
+          else delete offsets[mark.key];
+          return { ...layer, style: { ...layer.style, pointLabel: { ...layer.style.pointLabel, offsets } } };
+        }))} />
     </div>
     {(problems.length > 0 || notices) && <div className={`toast ${problems.length ? 'problem' : ''}`} role="status">
       <div>{problems.length ? problems.map((problem, index) => <p key={index}>{problem}</p>) : notices}</div>

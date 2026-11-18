@@ -118,10 +118,11 @@ function layerSources(overlays: DataLayer[], numberedLayerId: string | undefined
         const name = !numbered && labelField ? formatPointLabel(feature.properties?.[labelField], pointLabel.maxLines) : '';
         const label = name ? { lines: name.split('\n'), style: text, layout: pointLabel } : undefined;
         const positions = feature.geometry.type === 'Point' ? [feature.geometry.coordinates] : feature.geometry.coordinates;
-        for (const [longitude, latitude] of positions) {
-          points.push({ source, index, coordinate: [longitude, latitude],
-            radius: marker.size / 2 + marker.strokeWidth / 2, label });
-        }
+        positions.forEach(([longitude, latitude], component) => {
+          const key = index + ':' + component;
+          points.push({ source, layerId: layer.id, index, key, coordinate: [longitude, latitude],
+            radius: marker.size / 2 + marker.strokeWidth / 2, label, offset: pointLabel.offsets[key] });
+        });
         return {
           ...feature,
           properties: {

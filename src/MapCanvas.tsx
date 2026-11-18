@@ -1,4 +1,4 @@
-import { Crosshair, Expand, LoaderCircle, Minus, Plus } from 'lucide-react';
+import { Crosshair, Expand, LoaderCircle, Minus, PenLine, Plus } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AttributionControl, Map as GLMap, Marker, Popup, ScaleControl } from 'maplibre-gl';
@@ -6,13 +6,15 @@ import type { MapMouseEvent, StyleSpecification } from 'maplibre-gl';
 import type { Bounds, DataLayer } from './model';
 import { BEIJING_BOUNDS } from './model';
 import { ParkDetails, ParkSearch } from './ParkBrowser';
+import { PointLabelEditor } from './PointLabelEditor';
+import type { EditablePoint } from './PointLabelEditor';
 import { installMarkers } from './map/markers';
 import { labelClipPath } from './map/labelClip';
 import type { PlotScene } from './map/compose';
 import { browseParkFeatures, parkLocation } from './map/parkFeatures';
 import type { ParkFeature } from './map/parkFeatures';
-import { measurePointLabels, paintPointLabels, placePointLabels, preparePointLabelFonts, withinLabelRect } from './map/pointLabels';
-import type { PlacedPointLabel } from './map/pointLabels';
+import { measurePointLabels, paintPointLabels, placePointLabels, pointLabelId, preparePointLabelFonts, withinLabelRect } from './map/pointLabels';
+import type { PlacedPointLabel, PointLabelMark } from './map/pointLabels';
 
 interface Props {
   scene: PlotScene;
@@ -22,6 +24,7 @@ interface Props {
   status: string;
   example: boolean;
   sidebarCollapsed: boolean;
+  onPlaceLabel: (mark: PointLabelMark, offset: [number, number] | null) => void;
   onFailure: () => void;
 }
 
@@ -49,7 +52,7 @@ function mapOffset(map: GLMap): [number, number] {
   return [left / 2, top / 2];
 }
 
-export function MapCanvas({ scene, bounds, layers, notice, status, example, sidebarCollapsed, onFailure }: Props) {
+export function MapCanvas({ scene, bounds, layers, notice, status, example, sidebarCollapsed, onPlaceLabel, onFailure }: Props) {
   const { style } = scene;
   const parks = useMemo(() => browseParkFeatures(layers), [layers]);
   const currentParks = useRef(parks.bySource);
@@ -80,6 +83,11 @@ export function MapCanvas({ scene, bounds, layers, notice, status, example, side
   const [webgl, setWebgl] = useState(true);
   const [locating, setLocating] = useState(false);
   const [locationNotice, setLocationNotice] = useState('');
+  const [labelEditing, setLabelEditing] = useState(false);
+  const [selectedLabel, setSelectedLabel] = useState('');
+  const [editablePoints, setEditablePoints] = useState<EditablePoint[]>([]);
+  const editing = useRef(labelEditing);
+  editing.current = labelEditing;
   const locationMarker = useRef<Marker | null>(null);
   const locationRequest = useRef(0);
 
@@ -91,11 +99,25 @@ export function MapCanvas({ scene, bounds, layers, notice, status, example, side
 
   function selectPark(record: ParkFeature) {
     const location = record.pending ? null : parkLocation(record.geometry);
-    setSelection({ source: record.source, index: record.index, anchor: location?.anchor });
+    if (labelEditing) selectLabelFor(record);
+    else setSelection({ source: record.source, index: record.index, anchor: location?.anchor });
     const map = liveMap.current;
     if (!map || !location) return;
     if (location.bounds) map.fitBounds(location.bounds, { padding: mapPadding(map, 58), maxZoom: 15.5, duration: 1050 });
     else map.flyTo({ center: location.anchor, zoom: Math.max(map.getZoom(), 15.5), offset: mapOffset(map), duration: 1050 });
+  }
+
+  function selectLabelFor(record: ParkFeature, clicked?: { x: number; y: number }) {
+    const map = liveMap.current;
+    const marks = currentScene.current.points.filter(mark => mark.label && mark.source === record.source && mark.index === record.index);
+    if (clicked && map && marks.length > 1) {
+      const distance = (mark: PointLabelMark) => {
+        const point = map.project(mark.coordinate);
+        return Math.hypot(point.x - clicked.x, point.y - clicked.y);
+      };
+      marks.sort((a, b) => distance(a) - distance(b));
+    }
+    setSelectedLabel(marks[0] ? pointLabelId(marks[0]) : '');
   }
 
   function locateUser() {
@@ -161,7 +183,7 @@ export function MapCanvas({ scene, bounds, layers, notice, status, example, side
       const text = drawnPointLabels.current.find(label => withinLabelRect({ x, y }, label.box));
       if (text) {
         const record = lookup.get(text.mark.source)?.[text.mark.index];
-        if (record) return { record, anchor: text.mark.coordinate };
+        if (record) return { record, anchor: text.mark.coordinate, labelId: pointLabelId(text.mark) };
       }
       const { foreground, style } = currentScene.current;
       const pointBox: [[number, number], [number, number]] = [[x - 4, y - 4], [x + 4, y + 4]];
@@ -191,6 +213,12 @@ export function MapCanvas({ scene, bounds, layers, notice, status, example, side
     };
     const onClick = (event: MapMouseEvent) => {
       const hit = hitPark(event);
+      if (editing.current) {
+        if (!hit) setSelectedLabel('');
+        else if (hit.labelId) setSelectedLabel(hit.labelId);
+        else selectLabelFor(hit.record, event.point);
+        return;
+      }
       if (!hit) return setSelection(undefined);
       const { record } = hit;
       const anchor = hit.anchor ?? (record.geometry.type === 'Point' ? parkLocation(record.geometry)?.anchor : event.lngLat.toArray());
@@ -231,7 +259,10 @@ export function MapCanvas({ scene, bounds, layers, notice, status, example, side
     const canvas = labelCanvas.current;
     const context = canvas?.getContext('2d');
     drawnPointLabels.current = [];
-    if (!map || !canvas || !context) return;
+    if (!map || !canvas || !context) {
+      if (labelEditing) setEditablePoints([]);
+      return;
+    }
     let measured = measurePointLabels(context, scene.points);
     let frame = 0;
     let active = true;
@@ -250,7 +281,19 @@ export function MapCanvas({ scene, bounds, layers, notice, status, example, side
         const { left, top } = mapInsets(map);
         const view = { left: left + 4, top: top + 49, right: width - 4, bottom: height - 5 };
         drawnPointLabels.current = placePointLabels(measured, point => map.project(point), view);
-        paintPointLabels(context, drawnPointLabels.current);
+        const labels = drawnPointLabels.current;
+        paintPointLabels(context, labelEditing && selectedLabel ? labels.filter(item => pointLabelId(item.mark) !== selectedLabel) : labels);
+        if (labelEditing) {
+          const laidOut = new Map(labels.map(item => [pointLabelId(item.mark), item]));
+          setEditablePoints(measured.flatMap(mark => {
+            if (!mark.label) return [];
+            const anchor = map.project(mark.coordinate);
+            if (!withinLabelRect(anchor, view)) return [];
+            const current = laidOut.get(pointLabelId(mark));
+            return [{ mark, anchor, view, width: mark.label.width, height: mark.label.height,
+              box: current?.box, manual: current?.manual }];
+          }));
+        }
       });
     };
 
@@ -268,7 +311,7 @@ export function MapCanvas({ scene, bounds, layers, notice, status, example, side
       map.off('move', redraw);
       map.off('resize', redraw);
     };
-  }, [scene.points, sidebarCollapsed]);
+  }, [scene.points, sidebarCollapsed, labelEditing, selectedLabel]);
 
   useEffect(() => {
     const map = liveMap.current;
@@ -376,7 +419,14 @@ export function MapCanvas({ scene, bounds, layers, notice, status, example, side
       }}><Expand size={18} /></button>
       <button type="button" aria-label="放大地图" title="放大地图" onClick={() => liveMap.current?.zoomIn()}><Plus size={19} /></button>
       <button type="button" aria-label="缩小地图" title="缩小地图" onClick={() => liveMap.current?.zoomOut()}><Minus size={19} /></button>
+      <button type="button" aria-label={labelEditing ? '退出标注编辑' : '标注编辑'} title={labelEditing ? '退出标注编辑' : '标注编辑'}
+        aria-pressed={labelEditing} disabled={!hasPointLabels} onClick={() => {
+          setSelection(undefined);
+          setSelectedLabel('');
+          setLabelEditing(value => !value);
+        }}><PenLine size={18} /></button>
     </div>
+    {labelEditing && <PointLabelEditor points={editablePoints} selected={selectedLabel} onSelect={setSelectedLabel} onPlace={onPlaceLabel} />}
     {locationNotice && <div className="location-notice" role="status">{locationNotice}</div>}
     <div className="map-status">
       <span>{status}</span>

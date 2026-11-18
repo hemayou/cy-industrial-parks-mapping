@@ -40,6 +40,7 @@ const enumValues: Record<string, string[]> = {
 const colorKeys = /^(color|halo|stroke|\w*Color\w*|\w*Background)$/;
 const rangeByKey: Record<string, [number, number]> = {
   maxLines: [1, 6], lineHeight: [.75, 2.5], size: [1, 72], strokeWidth: [0, 8], haloWidth: [0, 6], opacity: [0, 1], legendColumns: [1, 6],
+  gap: [0, 25], leaderRange: [20, 160],
   titleSize: [8, 125], legendSize: [6, 60], legendHeadingSize: [6, 72], legendSymbolSize: [5, 60], northSize: [14, 100],
   dpi: [36, 1200], paperWidth: [30, 2500], paperHeight: [30, 2500],
 };
@@ -109,6 +110,14 @@ export function readProject(value: unknown): ProjectFile {
   const layers = value.layers.slice(0, 60).flatMap(item => {
     if (!isObject(item) || typeof item.name !== 'string' || typeof item.id !== 'string') return [];
     const style = patch(DEFAULT_LAYER, item.style);
+    if (isObject(item.style) && isObject(item.style.pointLabel) && isObject(item.style.pointLabel.offsets)) {
+      style.pointLabel.offsets = Object.fromEntries(Object.entries(item.style.pointLabel.offsets).flatMap(([key, offset]) => {
+        if (!/^\d+:\d+$/.test(key) || !Array.isArray(offset) || offset.length !== 2) return [];
+        const [x, y] = offset;
+        if (typeof x !== 'number' || typeof y !== 'number' || !Number.isFinite(x) || !Number.isFinite(y)) return [];
+        return [[key, [x, y] as [number, number]] as const];
+      }));
+    }
     if (isObject(item.style) && isObject(item.style.categories)) {
       style.categories = Object.fromEntries(Object.entries(item.style.categories).slice(0, 2000)
         .filter(([, point]) => isObject(point)).map(([key, point]) => {

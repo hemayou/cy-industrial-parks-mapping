@@ -322,6 +322,7 @@ summary { cursor: pointer; font-weight: 700; }
 .map-navigation button { display: grid; place-items: center; border: 0; min-width: 42px; min-height: 39px; background: transparent; }
 .map-navigation button:not(:last-child) { border-bottom: 1px solid var(--line); }
 .map-navigation button:hover { background: var(--accent-wash); }
+.map-navigation button[aria-pressed="true"] { color: var(--accent); background: var(--accent-wash); }
 .map-navigation button:focus-visible { outline-offset: -3px; }
 .map-workspace .maplibregl-ctrl-bottom-left { left: var(--map-inset-left); transition: left 250ms cubic-bezier(.22,.8,.25,1); }
 .map-workspace :is(.maplibregl-ctrl-attrib, .maplibregl-ctrl-scale) { background-color: var(--glass-control); color: var(--ink); }
@@ -333,6 +334,23 @@ summary { cursor: pointer; font-weight: 700; }
   position: absolute; z-index: 7; top: calc(var(--map-controls-top) + 47px); right: 65px; max-width: min(275px, calc(100% - 86px));
   padding: 8px 11px; border-radius: 11px; border: 1px solid var(--line); background: var(--ui-surface); box-shadow: var(--shadow); font-size: 12px;
 }
+.label-editor-panel {
+  position: absolute; z-index: 7; top: calc(var(--map-controls-top) + 50px); right: 67px;
+  width: min(260px, calc(100% - 88px)); display: grid; gap: 9px; padding: 12px;
+  border: 1px solid var(--ui-highlight); border-radius: 14px; background: var(--glass-menu);
+  backdrop-filter: var(--glass-filter); color: var(--ink); box-shadow: var(--shadow);
+}
+.label-editor-panel h2 { font-size: 14px; }
+.label-editor-panel p { font-size: 12px; color: var(--muted); }
+.label-edit-guide {
+  position: absolute; z-index: 4; pointer-events: none; border-top: 1px dashed var(--accent); transform-origin: left center;
+}
+.label-edit-handle {
+  position: absolute; z-index: 5; transform: translate(-50%, -50%); touch-action: none; cursor: grab;
+  padding: 1px 3px; border: 1px solid var(--accent); border-radius: 4px; color: var(--ink);
+  background: var(--ui-surface); box-shadow: var(--shadow); white-space: pre;
+}
+.label-edit-handle:active { cursor: grabbing; }
 .map-status {
   position: absolute; bottom: 0; left: 0; right: 0; min-height: 32px; display: flex; justify-content: space-between;
   align-items: center; gap: 8px; padding: 5px 13px; background: var(--ui-surface); border-top: 1px solid var(--line);
