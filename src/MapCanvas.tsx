@@ -1,7 +1,7 @@
-import { Crosshair, Minus, Plus } from 'lucide-react';
+import { Crosshair, Expand, LoaderCircle, Minus, Plus } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AttributionControl, Map as GLMap, Popup, ScaleControl } from 'maplibre-gl';
+import { AttributionControl, Map as GLMap, Marker, Popup, ScaleControl } from 'maplibre-gl';
 import type { MapMouseEvent, StyleSpecification } from 'maplibre-gl';
 import type { Bounds, DataLayer } from './model';
 import { BEIJING_BOUNDS } from './model';
@@ -26,6 +26,24 @@ interface Selection {
   source: string;
   index: number;
   anchor?: [number, number];
+}
+
+function mapInsets(map: GLMap) {
+  const css = getComputedStyle(map.getContainer());
+  return {
+    left: Number.parseFloat(css.getPropertyValue('--map-inset-left')) || 0,
+    top: Number.parseFloat(css.getPropertyValue('--map-controls-top')) || 0,
+  };
+}
+
+function mapPadding(map: GLMap, margin: number) {
+  const { left, top } = mapInsets(map);
+  return { left: left + margin, right: margin, top: top + margin, bottom: margin };
+}
+
+function mapOffset(map: GLMap): [number, number] {
+  const { left, top } = mapInsets(map);
+  return [left / 2, top / 2];
 }
 
 export function MapCanvas({ scene, bounds, layers, notice, status, example, onFailure }: Props) {
@@ -55,11 +73,15 @@ export function MapCanvas({ scene, bounds, layers, notice, status, example, onFa
   const [zoom, setZoom] = useState(11);
   const [mouse, setMouse] = useState<string>();
   const [webgl, setWebgl] = useState(true);
+  const [locating, setLocating] = useState(false);
+  const [locationNotice, setLocationNotice] = useState('');
+  const locationMarker = useRef<Marker | null>(null);
+  const locationRequest = useRef(0);
 
   function fit(map: GLMap, region: Bounds) {
     const element = map.getContainer();
-    const padding = Math.round(Math.max(18, Math.min(70, Math.min(element.clientWidth, element.clientHeight) * 0.12)));
-    map.fitBounds(region, { padding, duration: 0, maxZoom: 16 });
+    const margin = Math.round(Math.max(18, Math.min(70, Math.min(element.clientWidth, element.clientHeight) * 0.12)));
+    map.fitBounds(region, { padding: mapPadding(map, margin), duration: 0, maxZoom: 16 });
   }
 
   function selectPark(record: ParkFeature) {
@@ -67,8 +89,45 @@ export function MapCanvas({ scene, bounds, layers, notice, status, example, onFa
     setSelection({ source: record.source, index: record.index, anchor: location?.anchor });
     const map = liveMap.current;
     if (!map || !location) return;
-    if (location.bounds) map.fitBounds(location.bounds, { padding: 75, maxZoom: 15.5, duration: 1050 });
-    else map.flyTo({ center: location.anchor, zoom: Math.max(map.getZoom(), 15.5), duration: 1050 });
+    if (location.bounds) map.fitBounds(location.bounds, { padding: mapPadding(map, 58), maxZoom: 15.5, duration: 1050 });
+    else map.flyTo({ center: location.anchor, zoom: Math.max(map.getZoom(), 15.5), offset: mapOffset(map), duration: 1050 });
+  }
+
+  function locateUser() {
+    const map = liveMap.current;
+    if (!map) return;
+    if (!window.isSecureContext || !navigator.geolocation) {
+      setLocationNotice('请在支持定位的 HTTPS 页面打开地图。');
+      return;
+    }
+    const request = ++locationRequest.current;
+    setLocating(true);
+    setLocationNotice('正在请求当前位置…');
+    navigator.geolocation.getCurrentPosition(({ coords }) => {
+      if (liveMap.current !== map || locationRequest.current !== request) return;
+      const { longitude, latitude } = coords;
+      const point: [number, number] = [longitude, latitude];
+      const [[west, south], [east, north]] = BEIJING_BOUNDS;
+      if (longitude < west || longitude > east || latitude < south || latitude > north) map.setMaxBounds(null);
+      if (!locationMarker.current) {
+        const element = document.createElement('div');
+        element.className = 'position-dot';
+        element.setAttribute('role', 'img');
+        element.setAttribute('aria-label', '当前位置');
+        locationMarker.current = new Marker({ element }).setLngLat(point).addTo(map);
+      } else {
+        locationMarker.current.setLngLat(point);
+      }
+      setSelection(undefined);
+      setLocating(false);
+      setLocationNotice('');
+      map.flyTo({ center: point, zoom: 14.5, offset: mapOffset(map), duration: 950 });
+    }, error => {
+      if (liveMap.current !== map || locationRequest.current !== request) return;
+      setLocating(false);
+      setLocationNotice(error.code === 1 ? '请在浏览器的站点权限中允许位置访问，再重试。'
+        : error.code === 3 ? '定位超时，请重试。' : '暂时无法获取设备位置，请检查定位服务。');
+    }, { enableHighAccuracy: true, maximumAge: 60_000, timeout: 12_000 });
   }
 
   useEffect(() => {
@@ -138,6 +197,8 @@ export function MapCanvas({ scene, bounds, layers, notice, status, example, onFa
     fit(map, firstBounds.current);
     return () => {
       liveMap.current = null;
+      locationMarker.current?.remove();
+      locationMarker.current = null;
       map.remove();
     };
   }, []);
@@ -236,20 +297,30 @@ export function MapCanvas({ scene, bounds, layers, notice, status, example, onFa
     {hasForeground && <div ref={foregroundContainer} className="map-canvas map-overlay-pass" aria-hidden="true" />}
     <div className="map-heading">
       <ParkSearch entries={parks.searchable} onSelect={selectPark} />
-      <div className="map-scope">
-        <span><i className="scope-dot" />朝阳区全域</span>
-        {example && <span className="sample-chip">示例图层</span>}
-      </div>
+      {example && <span className="sample-chip">示例图层</span>}
     </div>
     {selectedPark && (popupAnchor && webgl
       ? createPortal(<ParkDetails record={selectedPark} onClose={() => setSelection(undefined)} />, popupContent)
       : <div className="park-unplaced"><ParkDetails record={selectedPark} onClose={() => setSelection(undefined)} /></div>)}
     <div className="map-navigation">
-      <button type="button" aria-label="定位朝阳区全域" title="定位朝阳区全域"
-        onClick={() => liveMap.current && fit(liveMap.current, bounds)}><Crosshair size={18} /></button>
+      <button type="button" aria-label="定位当前位置" title="定位当前位置" aria-busy={locating}
+        disabled={!webgl || locating} onClick={locateUser}>
+        {locating ? <LoaderCircle size={18} className="spin" /> : <Crosshair size={18} />}
+      </button>
+      <button type="button" aria-label="返回朝阳区全域" title="返回朝阳区全域" onClick={() => {
+        locationRequest.current++;
+        setLocating(false);
+        setLocationNotice('');
+        const map = liveMap.current;
+        if (map) {
+          map.setMaxBounds(BEIJING_BOUNDS);
+          fit(map, bounds);
+        }
+      }}><Expand size={18} /></button>
       <button type="button" aria-label="放大地图" title="放大地图" onClick={() => liveMap.current?.zoomIn()}><Plus size={19} /></button>
       <button type="button" aria-label="缩小地图" title="缩小地图" onClick={() => liveMap.current?.zoomOut()}><Minus size={19} /></button>
     </div>
+    {locationNotice && <div className="location-notice" role="status">{locationNotice}</div>}
     <div className="map-status">
       <span>{status}</span>
       <span className="map-coords">{mouse ?? 'WGS84'} <i /> 缩放 {zoom.toFixed(1)}</span>

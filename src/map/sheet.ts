@@ -17,8 +17,21 @@ interface SheetPlan {
 }
 
 const pointToCss = 96 / 72;
+const creditFontSize = 9;
 export const fontCss = (font: FontFamily, size: number, weight = 400) =>
   `${weight} ${size * pointToCss}px "${font}", "PingFang SC", "Microsoft YaHei", sans-serif`;
+
+function sheetCredit(attribution: string[]) {
+  // The Esri relief and vector credits start with the same publisher line.
+  const esriPrefix = 'Powered by Esri | Sources: Esri, ';
+  let hasEsriPrefix = false;
+  return attribution.filter(Boolean).map(line => {
+    if (!line.startsWith(esriPrefix)) return line;
+    const credit = hasEsriPrefix ? line.slice(esriPrefix.length) : line;
+    hasEsriPrefix = true;
+    return credit;
+  }).join(' · ');
+}
 
 function wrapText(context: CanvasRenderingContext2D, value: string, width: number): string[] {
   const rows: string[] = [];
@@ -57,7 +70,7 @@ export async function prepareSheetFonts(layout: Layout, layers: DataLayer[], att
     document.fonts.load(fontCss(layout.titleFont, layout.titleSize, 700), layout.title + layout.titleSubtitle || '制图'),
     document.fonts.load(fontCss(layout.legendFont, layout.legendSize), legendText || '图例'),
     document.fonts.load(fontCss('Noto Sans SC', 11, 700), '北项目名录分类图例'),
-    document.fonts.load(fontCss('Noto Sans SC', 10), attribution.join(' ') + '资料来源开放参考区界示例数据'),
+    document.fonts.load(fontCss('Noto Sans SC', creditFontSize), sheetCredit(attribution)),
   ]);
 }
 
@@ -70,9 +83,10 @@ export function planSheet(
   let top = margin;
   let bottom = height - margin;
 
-  context.font = fontCss('Noto Sans SC', 10);
-  const footer = attribution.flatMap(line => wrapText(context, line, usableWidth));
-  bottom -= footer.length * 17 + gap;
+  context.font = fontCss('Noto Sans SC', creditFontSize);
+  const credit = sheetCredit(attribution);
+  const footer = credit ? wrapText(context, credit, usableWidth) : [];
+  if (footer.length) bottom -= footer.length * 17 + gap;
 
   let title: SheetPlan['title'] = null;
   if (layout.titleVisible && layout.title.trim()) {
@@ -253,7 +267,7 @@ export async function renderSheetFrames(
 }
 
 export function paintSheet(
-  context: CanvasRenderingContext2D, height: number,
+  context: CanvasRenderingContext2D, width: number, height: number,
   plan: SheetPlan, layout: Layout, deferFrames = false,
 ) {
   context.strokeStyle = '#8d9ba5';
@@ -290,10 +304,10 @@ export function paintSheet(
     context.fill();
   }
 
-  context.textAlign = 'left';
+  context.textAlign = 'right';
   context.textBaseline = 'top';
-  context.font = fontCss('Noto Sans SC', 10);
+  context.font = fontCss('Noto Sans SC', creditFontSize);
   context.fillStyle = '#384d5e';
   const y = height - plan.margin - plan.footer.length * 17;
-  plan.footer.forEach((line, index) => context.fillText(line, plan.margin, y + index * 17));
+  plan.footer.forEach((line, index) => context.fillText(line, width - plan.margin, y + index * 17));
 }

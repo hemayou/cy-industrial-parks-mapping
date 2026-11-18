@@ -143,7 +143,7 @@ export async function renderSheet(job: ExportJob, preview = false) {
     await drawPass(scene.style);
     if (scene.annotations) await drawPass(scene.annotations.style, scene.annotations);
     if (scene.foreground) await drawPass(scene.foreground);
-    paintSheet(context, logicalHeight, plan, layout, preview);
+    paintSheet(context, logicalWidth, logicalHeight, plan, layout, preview);
     const frames = preview ? await renderSheetFrames(logicalWidth, logicalHeight, scale, plan, layout) : [];
     const format = preview ? 'png' : output.type;
     const blob = await canvasBlob(canvas, format);

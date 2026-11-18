@@ -1,0 +1,8 @@
+{
+  "name": "cy-industrial-parks-mapping",
+  "pages_build_output_dir": "./site",
+  "compatibility_date": "2026-11-18",
+  "services": [
+    { "binding": "WORKSPACE", "service": "cy-industrial-parks-mapping" }
+  ]
+}

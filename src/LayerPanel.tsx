@@ -2,6 +2,7 @@ import { ArrowDown, ArrowUp, Eye, EyeOff, FileUp, Layers2, Map as MapIcon, Trash
 import type { BoundaryStyle, DataLayer, PointLabelPlacement, PointLabelStyle, PointStyle, Shape } from './model';
 import { categoryRows } from './model';
 import { BoundaryControls, Color, Field, LineSelect, NumberInput, Section, Select, TextControls } from './controls';
+import { POINT_PALETTES, pointPalette } from './pointPalettes';
 
 const shapes = [
   { value: 'circle', label: '圆形' }, { value: 'square', label: '方形' },
@@ -64,6 +65,18 @@ export function LayerPanel({
   const change = (patch: Partial<DataLayer['style']>) => active && onUpdate({ ...active, style: { ...active.style, ...patch } });
   const fieldChoices = [{ value: '', label: '选择字段' }, ...active?.fields.map(field => ({ value: field, label: field })) ?? []];
   const rows = active?.kinds.point && active.style.categoryField ? categoryRows(active) : [];
+  const hasCustomColors = active && Object.values(active.style.categories).some(category => category.color);
+
+  function changePalette(id: string) {
+    if (!active) return;
+    const categories = Object.fromEntries(Object.entries(active.style.categories).map(([key, override]) => {
+      const style = { ...override };
+      delete style.color;
+      return [key, style];
+    }));
+    change({ categoryPalette: pointPalette(id).id, categories });
+  }
+
   function move(key: string, offset: number) {
     const order = rows.map(row => row.key);
     const oldIndex = order.indexOf(key);
@@ -119,6 +132,18 @@ export function LayerPanel({
         <Field label="编号字段"><Select value={active.style.numberField} choices={[{ value: '', label: '自动编号' }, ...fieldChoices.slice(1)]}
           onChange={numberField => change({ numberField })} /></Field>
         <MarkerControls point={active.style.point} onChange={patch => change({ point: { ...active.style.point, ...patch } })} />
+        {!!rows.length && <div className="point-palette">
+          <Field label="分类色系">
+            <select value={hasCustomColors ? '' : active.style.categoryPalette}
+              onChange={event => changePalette(event.currentTarget.value)}>
+              <option value="" disabled>自定义配色</option>
+              {POINT_PALETTES.map(palette => <option key={palette.id} value={palette.id}>{palette.label}</option>)}
+            </select>
+          </Field>
+          <div className="palette-colors" aria-hidden="true">
+            {rows.slice(0, 12).map(row => <span key={row.key} style={{ background: row.style.color }} />)}
+          </div>
+        </div>}
         {!!rows.length && <div className="class-list">
           {rows.map((row, index) => <details key={row.key} className="category-detail">
             <summary>

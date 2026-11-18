@@ -1,4 +1,4 @@
-import { Compass, Download, FileCog, FileUp, Layers3, Map as MapIcon, PanelTop, X } from 'lucide-react';
+import { Compass, Download, FileCog, FileUp, Layers3, Map as MapIcon, PanelLeftClose, PanelLeftOpen, PanelTop, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import type { StyleSpecification } from 'maplibre-gl';
@@ -81,6 +81,7 @@ async function exampleLayers() {
 
 export function App() {
   const [tab, setTab] = useState<Tab>('base');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [selected, setSelected] = useState(openedMap);
   const [loaded, setLoaded] = useState<{ entry: CatalogStyle; raw: StyleSpecification }>({ entry: openedMap, raw: EMPTY_STYLE });
   const [manualKeys, setManualKeys] = useState<ProviderKeys>(emptyKeys);
@@ -354,10 +355,15 @@ export function App() {
   const mapNotice = load === 'key' && selected.provider === 'esri'
     ? 'Esri 尚未配置 API key。请在底图凭据中填写具备 Basemap Styles 权限的 key。'
     : load === 'failed' || tileFailed ? '底图连接失败。可在底图面板重试或切换样式。' : undefined;
+  const sidebarAction = sidebarCollapsed ? '展开制图面板' : '收起制图面板';
 
   return <div className="app-shell">
     <header className="topbar">
       <div className="brand">
+        <button className="button dark-button sidebar-toggle" type="button" aria-label={sidebarAction} title={sidebarAction}
+          aria-controls="drawing-panel" aria-expanded={!sidebarCollapsed} onClick={() => setSidebarCollapsed(value => !value)}>
+          {sidebarCollapsed ? <PanelLeftOpen size={19} /> : <PanelLeftClose size={19} />}
+        </button>
         <span className="brand-logo"><Compass size={23} strokeWidth={1.6} /></span>
         <div><h1>朝阳园产业园区地图</h1><div className="brand-area">北京市朝阳区</div></div>
       </div>
@@ -372,8 +378,8 @@ export function App() {
           disabled={load !== 'ready' || tileFailed || !boundary}><Download size={17} /> 预览与导出</button>
       </div>
     </header>
-    <div className="workspace">
-      <aside className="sidebar" aria-label="制图设置">
+    <div className={sidebarCollapsed ? 'workspace sidebar-collapsed' : 'workspace'}>
+      <aside className="sidebar" id="drawing-panel" aria-label="制图设置" inert={sidebarCollapsed} aria-hidden={sidebarCollapsed || undefined}>
         <nav className="tabs" aria-label="制图设置页">
           {tabs.map(({ id, label, icon: Icon }) => <button key={id} type="button" aria-pressed={tab === id} onClick={() => setTab(id)}>
             <Icon size={17} strokeWidth={1.75} />{label}</button>)}

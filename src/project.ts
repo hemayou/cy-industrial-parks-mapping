@@ -1,6 +1,7 @@
 import { A1, DEFAULT_BASEMAP, DEFAULT_BOUNDARY, DEFAULT_LAYER, DEFAULT_LAYOUT, clampFrame } from './model';
 import type { BasemapId, BasemapStyle, BoundaryStyle, LayerAsset, LayerStyle, Layout, NormalizedFrame, OutputSpec } from './model';
 import { BASEMAPS } from './map/basemap';
+import { POINT_PALETTES } from './pointPalettes';
 
 export interface ProjectSettings {
   basemap: BasemapId;
@@ -32,6 +33,7 @@ const enumValues: Record<string, string[]> = {
   legendFont: ['Noto Sans SC', 'Noto Serif SC'],
   titlePosition: ['tl', 'tr', 'bl', 'br'], legendPosition: ['tl', 'tr', 'bl', 'br'], northPosition: ['tl', 'tr', 'bl', 'br'],
   legendMode: ['categories', 'numbered'], mode: ['paper', 'pixels'], type: ['png', 'jpeg'],
+  categoryPalette: POINT_PALETTES.map(palette => palette.id),
 };
 const colorKeys = /^(color|halo|stroke|\w*Color\w*|\w*Background)$/;
 const rangeByKey: Record<string, [number, number]> = {

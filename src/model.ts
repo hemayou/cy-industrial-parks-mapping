@@ -1,4 +1,6 @@
 import type { FeatureCollection, Geometry, GeoJsonProperties } from 'geojson';
+import { pointPalette } from './pointPalettes';
+import type { PointPaletteId } from './pointPalettes';
 
 export type Collection = FeatureCollection<Geometry, GeoJsonProperties>;
 export type Bounds = [[number, number], [number, number]];
@@ -52,6 +54,7 @@ export interface LayerStyle {
   pointLabel: PointLabelStyle;
   point: PointStyle;
   area: AreaStyle;
+  categoryPalette: PointPaletteId;
   categories: Record<string, Partial<PointStyle>>;
   categoryOrder: string[];
 }
@@ -139,7 +142,6 @@ export interface OutputSpec {
 
 export const DISTRICT_FALLBACK: Bounds = [[116.34472, 39.80746], [116.63915, 40.10948]];
 export const BEIJING_BOUNDS: Bounds = [[115.35, 39.38], [117.56, 41.12]];
-export const PALETTE = ['#c53740', '#d26c24', '#258061', '#336fab', '#805da9', '#117b86', '#a44874', '#827025', '#654e42', '#566f78', '#528742', '#b54a2e'];
 
 export const DEFAULT_TEXT: TextStyle = {
   font: 'Noto Sans SC', size: 15, bold: true, color: '#1c2630', halo: '#ffffff', haloWidth: 1.35,
@@ -150,7 +152,7 @@ export const DEFAULT_LAYER: LayerStyle = {
   pointLabel: { maxLines: 1, align: 'center', lineHeight: 1.2, placement: 'auto' },
   point: { shape: 'circle', size: 12, color: '#bd412e', stroke: '#ffffff', strokeWidth: 1.4 },
   area: { color: '#487ba1', opacity: 0.16, stroke: '#487ba1', width: 1.5, line: 'solid' },
-  categories: {}, categoryOrder: [],
+  categoryPalette: 'classic', categories: {}, categoryOrder: [],
 };
 export const DEFAULT_BASEMAP: BasemapStyle = {
   labels: true, clipLabelsToBoundary: false, minor: false, text: { ...DEFAULT_TEXT, size: 17, color: '#273745', haloWidth: 1.6 },
@@ -190,7 +192,8 @@ export function pointFeatures(layer: DataLayer) {
 }
 
 export function categoryRows(layer: DataLayer): { key: string; count: number; style: PointStyle }[] {
-  const { categoryField, categories, categoryOrder, point } = layer.style;
+  const { categoryField, categories, categoryOrder, categoryPalette, point } = layer.style;
+  const palette = pointPalette(categoryPalette).colors;
   const counts = new Map<string, number>();
   for (const { properties } of pointFeatures(layer)) {
     const key = categoryField ? categoryKey(properties?.[categoryField]) : layer.name;
@@ -204,7 +207,7 @@ export function categoryRows(layer: DataLayer): { key: string; count: number; st
       key, count: counts.get(key) ?? 0,
       style: {
         ...point,
-        color: categoryField ? PALETTE[index % PALETTE.length] : point.color,
+        color: categoryField ? palette[index % palette.length] : point.color,
         ...Object.getOwnPropertyDescriptor(categories, key)?.value,
       },
     };
