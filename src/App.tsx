@@ -1,8 +1,9 @@
-import { Compass, Download, FileCog, FileUp, Layers3, Map as MapIcon, PanelLeftClose, PanelLeftOpen, PanelTop, X } from 'lucide-react';
+import { Compass, Download, FileCog, FileUp, Layers3, Map as MapIcon, Moon, PanelLeftClose, PanelLeftOpen, PanelTop, Sun, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ChangeEvent } from 'react';
+import type { ChangeEvent, CSSProperties } from 'react';
 import type { StyleSpecification } from 'maplibre-gl';
 import { BasemapPanel } from './BasemapPanel';
+import { AppearanceMenu, readAppearance, saveAppearance } from './AppearanceMenu';
 import { LayerPanel } from './LayerPanel';
 import { LayoutPanel } from './LayoutPanel';
 import { MapCanvas } from './MapCanvas';
@@ -82,6 +83,7 @@ async function exampleLayers() {
 export function App() {
   const [tab, setTab] = useState<Tab>('base');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [appearance, setAppearance] = useState(readAppearance);
   const [selected, setSelected] = useState(openedMap);
   const [loaded, setLoaded] = useState<{ entry: CatalogStyle; raw: StyleSpecification }>({ entry: openedMap, raw: EMPTY_STYLE });
   const [manualKeys, setManualKeys] = useState<ProviderKeys>(emptyKeys);
@@ -116,6 +118,8 @@ export function App() {
   const worker = useRef<Worker | null>(null);
   const fileJob = useRef(0);
   const allowInitialLayers = useRef(true);
+
+  useEffect(() => saveAppearance(appearance), [appearance]);
 
   useEffect(() => {
     assetGeoJson(defaultBoundaryPath, '朝阳区区界').then(data => {
@@ -356,8 +360,13 @@ export function App() {
     ? 'Esri 尚未配置 API key。请在底图凭据中填写具备 Basemap Styles 权限的 key。'
     : load === 'failed' || tileFailed ? '底图连接失败。可在底图面板重试或切换样式。' : undefined;
   const sidebarAction = sidebarCollapsed ? '展开制图面板' : '收起制图面板';
+  const uiDark = appearance.mode === 'auto' ? loaded.entry.dark : appearance.mode === 'dark';
+  const themeAction = uiDark ? '切换浅色界面' : '切换深色界面';
 
-  return <div className="app-shell">
+  return <div className="app-shell" data-glass={appearance.transparent ? 'transparent' : 'opaque'}
+    data-blur={appearance.blur > 0 ? 'on' : 'off'} data-ui-mode={uiDark ? 'dark' : 'light'}
+    style={{ '--ui-theme': appearance.color, '--glass-blur': `${appearance.blur}px`,
+      '--glass-transparency': `${appearance.transparency}%` } as CSSProperties}>
     <header className="topbar">
       <div className="brand">
         <button className="button dark-button sidebar-toggle" type="button" aria-label={sidebarAction} title={sidebarAction}
@@ -376,6 +385,11 @@ export function App() {
         </div>
         <button className="button primary export-head" type="button" onClick={() => setModal(true)}
           disabled={load !== 'ready' || tileFailed || !boundary}><Download size={17} /> 预览与导出</button>
+        <button className="button dark-button appearance-toggle" type="button" aria-label={themeAction} title={themeAction}
+          onClick={() => setAppearance(value => ({ ...value, mode: uiDark ? 'light' : 'dark' }))}>
+          {uiDark ? <Sun size={18} /> : <Moon size={18} />}
+        </button>
+        <AppearanceMenu appearance={appearance} onChange={setAppearance} />
       </div>
     </header>
     <div className={sidebarCollapsed ? 'workspace sidebar-collapsed' : 'workspace'}>
@@ -405,7 +419,7 @@ export function App() {
         </div>
       </aside>
       <MapCanvas scene={scene} bounds={bounds} layers={layers} notice={mapNotice} status={status}
-        example={example} onFailure={() => setTileFailed(true)} />
+        example={example} sidebarCollapsed={sidebarCollapsed} onFailure={() => setTileFailed(true)} />
     </div>
     {(problems.length > 0 || notices) && <div className={`toast ${problems.length ? 'problem' : ''}`} role="status">
       <div>{problems.length ? problems.map((problem, index) => <p key={index}>{problem}</p>) : notices}</div>

@@ -4,7 +4,8 @@ import { categoryKey, categoryRows, numberedRows } from '../model';
 import { fontStack } from './basemap';
 import { mapFontFaces } from './fonts';
 import { markerId } from './markers';
-import { formatPointLabel, pointLabelLayout } from './pointLabels';
+import { formatPointLabel } from './pointLabels';
+import type { PointLabelMark } from './pointLabels';
 import { tiandituLabelLayer } from './tianditu';
 import { clipPolygons } from './labelClip';
 import type { ClipPolygons } from './labelClip';
@@ -18,7 +19,7 @@ export function lineDash(line: LineStyle) {
 const byType = (type: 'Point' | 'LineString' | 'Polygon') => ['==', ['geometry-type'], type] as FilterSpecification;
 
 function labels(
-  id: string, source: string, text: TextStyle, value: ExpressionSpecification, type: 'Point' | 'LineString' | 'Polygon',
+  id: string, source: string, text: TextStyle, value: ExpressionSpecification, type: 'LineString' | 'Polygon',
 ): SymbolLayerSpecification {
   return {
     id, source, type: 'symbol', filter: byType(type),
@@ -30,7 +31,6 @@ function labels(
       'text-padding': 3,
       'text-line-height': 1.19,
       'text-variable-anchor': ['top', 'right', 'bottom', 'left', 'top-right', 'bottom-left'],
-      'text-radial-offset': type === 'Point' ? 0.82 : 0,
       ...(type === 'LineString' ? { 'symbol-placement': 'line-center', 'text-rotation-alignment': 'map' } : {}),
     },
     paint: { 'text-color': text.color, 'text-halo-color': text.halo, 'text-halo-width': text.haloWidth },
@@ -41,7 +41,6 @@ const FIELD_SYMBOL = '__cy_symbol';
 const FIELD_SIZE = '__cy_size';
 const FIELD_NUMBER = '__cy_number';
 const FIELD_NUMBER_COLOR = '__cy_num_color';
-const FIELD_POINT_LABEL = '__cy_point_label';
 const FIELD_FILL = '__cy_fill';
 
 export interface PlotOptions {
@@ -55,6 +54,7 @@ export interface PlotOptions {
 
 export interface PlotScene {
   style: StyleSpecification;
+  points: PointLabelMark[];
   annotations?: { style: StyleSpecification; polygons: ClipPolygons; padding: number };
   foreground?: StyleSpecification;
 }
@@ -95,8 +95,10 @@ export function indexedPointStyle(layer: DataLayer) {
 
 function layerSources(overlays: DataLayer[], numberedLayerId: string | undefined) {
   const sources: StyleSpecification['sources'] = {};
+  const points: PointLabelMark[] = [];
   for (const layer of overlays) {
     if (!layer.style.visible) continue;
+    const source = overlaySourceId(layer.id);
     const numbered = layer.id === numberedLayerId;
     const numberByIndex = numbered ? new Map(numberedRows(layer).map(row => [row.featureIndex, row.number])) : new Map<number, string>();
     const pointStyle = indexedPointStyle(layer);
@@ -112,29 +114,37 @@ function layerSources(overlays: DataLayer[], numberedLayerId: string | undefined
         const number = numberByIndex.get(index);
         const paint = pointStyle(feature.properties);
         const marker = number === undefined ? paint : numberedPointStyle(paint, number);
+        const { labelField, pointLabel, text } = layer.style;
+        const name = !numbered && labelField ? formatPointLabel(feature.properties?.[labelField], pointLabel.maxLines) : '';
+        const label = name ? { lines: name.split('\n'), style: text, layout: pointLabel } : undefined;
+        const positions = feature.geometry.type === 'Point' ? [feature.geometry.coordinates] : feature.geometry.coordinates;
+        for (const [longitude, latitude] of positions) {
+          points.push({ source, index, coordinate: [longitude, latitude],
+            radius: marker.size / 2 + marker.strokeWidth / 2, label });
+        }
         return {
           ...feature,
           properties: {
             ...feature.properties,
             [FIELD_SYMBOL]: markerId(marker), [FIELD_SIZE]: marker.size,
             [FIELD_NUMBER]: number ?? '', [FIELD_NUMBER_COLOR]: readableInk(paint.color),
-            [FIELD_POINT_LABEL]: layer.style.labelField
-              ? formatPointLabel(feature.properties?.[layer.style.labelField], layer.style.pointLabel.maxLines) : '',
           },
         };
       }),
     };
-    sources[overlaySourceId(layer.id)] = { type: 'geojson', data, maxzoom: 17, generateId: true };
+    sources[source] = { type: 'geojson', data, maxzoom: 17, generateId: true };
   }
-  return sources;
+  return { sources, points };
 }
 
 export function composeStyle({ base, overlays, boundary, boundaryStyle, layout, annotationPadding }: PlotOptions): PlotScene {
   const legend = activeLegendLayer(overlays, layout);
   const numbered = layout.legendMode === 'numbered' ? legend?.id : undefined;
-  const sources = { ...base.sources, ...layerSources(overlays, numbered) };
+  const thematic = layerSources(overlays, numbered);
+  const sources = { ...base.sources, ...thematic.sources };
   const shapes: LayerSpecification[] = [];
-  const symbols: LayerSpecification[] = [];
+  const geometryLabels: LayerSpecification[] = [];
+  const pointSymbols: LayerSpecification[] = [];
   for (const layer of overlays) {
     if (!layer.style.visible) continue;
     const id = overlaySourceId(layer.id);
@@ -151,32 +161,22 @@ export function composeStyle({ base, overlays, boundary, boundaryStyle, layout, 
     }
     if (layer.kinds.line) shapes.push({ id: `${id}-line`, type: 'line', source: id, filter: byType('LineString'), paint: linePaint });
     if (layer.kinds.point) {
-      symbols.push({
+      pointSymbols.push({
         id: `${id}-marker`, type: 'symbol', source: id, filter: byType('Point'),
         layout: {
           'icon-image': ['get', FIELD_SYMBOL],
           'icon-size': ['/', ['number', ['get', FIELD_SIZE], 12], 44],
-          'icon-allow-overlap': true, 'icon-ignore-placement': true,
+          'icon-allow-overlap': true, 'icon-ignore-placement': false,
         },
       });
     }
     if (labelField) {
       const labelText: ExpressionSpecification = ['to-string', ['coalesce', ['get', labelField], '']];
-      if (layer.kinds.area) symbols.push(labels(`${id}-area-label`, id, text, labelText, 'Polygon'));
-      if (layer.kinds.line) symbols.push(labels(`${id}-line-label`, id, text, labelText, 'LineString'));
-      if (layer.kinds.point && numbered !== layer.id) {
-        symbols.push({
-          id: `${id}-point-label`, type: 'symbol', source: id, filter: byType('Point'),
-          layout: {
-            ...pointLabelLayout(layer.style.pointLabel),
-            'text-field': ['get', FIELD_POINT_LABEL], 'text-font': fontStack(text), 'text-size': text.size,
-          },
-          paint: { 'text-color': text.color, 'text-halo-color': text.halo, 'text-halo-width': text.haloWidth },
-        });
-      }
+      if (layer.kinds.area) geometryLabels.push(labels(`${id}-area-label`, id, text, labelText, 'Polygon'));
+      if (layer.kinds.line) geometryLabels.push(labels(`${id}-line-label`, id, text, labelText, 'LineString'));
     }
     if (numbered === layer.id && layer.kinds.point) {
-      symbols.push({
+      pointSymbols.push({
         id: `${id}-number`, type: 'symbol', source: id, filter: byType('Point'),
         layout: {
           'text-field': ['get', FIELD_NUMBER], 'text-font': ['Noto Sans SC Bold'], 'text-size': Math.min(24, Math.max(12, text.size * 0.82)),
@@ -199,15 +199,16 @@ export function composeStyle({ base, overlays, boundary, boundaryStyle, layout, 
   const isBaseText = (layer: LayerSpecification) => layer.type === 'symbol' || layer.id === tiandituLabelLayer;
   const baseShapes = base.layers.filter(layer => !isBaseText(layer));
   const baseText = base.layers.filter(isBaseText);
+  const symbols = [...geometryLabels, ...pointSymbols];
   const style = { ...base, sources, 'font-faces': mapFontFaces(), layers: [...baseShapes, ...shapes] };
   const polygons = annotationPadding > 0 && boundary ? clipPolygons(boundary) : [];
   const visibleLabels = baseText.filter(layer => layer.layout?.visibility !== 'none');
   if (polygons.length && visibleLabels.length) {
     return {
-      style,
+      style, points: thematic.points,
       annotations: { style: transparentPass(style, visibleLabels), polygons, padding: annotationPadding },
       ...(symbols.length ? { foreground: transparentPass(style, symbols) } : {}),
     };
   }
-  return { style: { ...style, layers: [...style.layers, ...baseText, ...symbols] } };
+  return { style: { ...style, layers: [...style.layers, ...baseText, ...symbols] }, points: thematic.points };
 }

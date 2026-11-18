@@ -6,6 +6,8 @@ interface Env {
   ESRI_BROWSER_API_KEY?: string;
   CARTO_BROWSER_API_KEY?: string;
   TIANDITU_BROWSER_TK?: string;
+  WORKSPACE_LEGACY_HOST?: string;
+  WORKSPACE_PUBLIC_HOST?: string;
 }
 
 const loginPath = '/_workspace/login';
@@ -200,6 +202,13 @@ export default {
     if (url.protocol !== 'https:' && !['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)) {
       url.protocol = 'https:';
       return new Response(null, { status: 303, headers: { ...privateHeaders, 'Location': url.href } });
+    }
+
+    if (env.WORKSPACE_PUBLIC_HOST && url.hostname === env.WORKSPACE_LEGACY_HOST &&
+      url.hostname !== env.WORKSPACE_PUBLIC_HOST && (url.pathname === '/' || url.pathname === '/index.html') &&
+      (request.method === 'GET' || request.method === 'HEAD')) {
+      url.hostname = env.WORKSPACE_PUBLIC_HOST;
+      return new Response(null, { status: 302, headers: { ...privateHeaders, 'Location': url.href } });
     }
 
     const passcode = env.WORKSPACE_PASSCODE;

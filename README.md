@@ -20,9 +20,9 @@ Vite 默认监听本机 5173 端口。工作台打开时载入开放预览底图
 ## 导入和成图
 
 - 支持 GeoJSON、Shapefile 和 GeoPackage 点、线、面。Shapefile 可选择 ZIP，也可一次选择同名 SHP、DBF、PRJ、CPG 等文件。GeoPackage 中可读取多张矢量表。界面按文件声明识别坐标系，也接受 EPSG、WKT 或 PROJ 的显式定义。常用 WGS84、Web Mercator 和 CGCS2000 高斯克吕格定义已内置。使用北京地方坐标时，先按项目口径转换为 WGS84。
-- 点击“图层”设置名称字段、分类字段、点形状、大小、颜色与描边。点名默认单行，会在八个方向间自动避让。可选择最多 2 至 6 行、左中右对齐、行距或固定方向。“朝阳区行政区界”图层可独立调线色、线宽、线型和不透明度。线、面及朝阳区界有各自的线型、宽度、透明度或颜色控制。区块可按存储六位十六进制色值的字段填色。
+- 点击“图层”设置名称字段、分类字段、点形状、大小、颜色与描边。点名默认单行，可选择最多 2 至 6 行、左中右对齐、行距或固定方向。自动标注先尝试近处方向，空间紧张时尝试用短引线连接。网页与出图使用相同的点名排布规则。“朝阳区行政区界”图层可独立调线色、线宽、线型和不透明度。区块可按存储六位十六进制色值的字段填色。
 - 点击地图上的园区点或示意区块可查看属性。在地图顶部搜索园区名称、地址或产业关键词，点击候选或用方向键和回车定位。仅有区县级参考位置的项目会标明“位置待核”，选择后打开台账详情。
-- 工具栏左侧可收起制图面板。点图层可从“分类色系”统一配色，再逐类调整颜色和符号。右上角“定位当前位置”使用设备定位，“返回朝阳区全域”恢复制图范围。
+- 工具栏左侧可收起制图面板。右上角可一键切换明暗界面，也可在“外观设置”选择自动跟随底图。外观设置还支持主题色、透明度、高斯模糊与实色模式。点图层可从“分类色系”统一配色，再逐类调整颜色和符号。地图上的“定位当前位置”使用设备定位，“返回朝阳区全域”恢复制图范围。
 - 点击“版式”调整图名、图例和指北针。分类图例可复用当前分类字段和配色。编号名录按唯一编号字段联动图面编号和侧边名录，字段缺失或重复时按图层顺序自动编号。文字、符号、分栏、排序、背景和版位可配置。在“预览与导出”里可直接拖动图例框和图名框，拖框的右下角调整大小，标题可加副标题。预览工具提供放大、缩小、拖动平移和适合窗口。
 - 默认 A1 竖版为 594 × 841 毫米、300 DPI、7016 × 9933 像素。预设另含 A0 竖版、240 DPI。也可输入纸张宽高或直接编辑像素，界面按所选 DPI 显示印刷尺寸。导出重新绘制地图与整张图纸，写入 PNG／JPG 分辨率元数据。成图会保留完整朝阳区范围，包括分离图斑。大画幅受设备的 WebGL 和图像编码能力约束。地图画布分辨率因设备降低时，工作台会在导出结果中提示。
 
@@ -52,7 +52,7 @@ Esri 请求简体中文地名。各供应商的地名字段经过汉字和标点
 
 ## Cloudflare 部署
 
-`pages/` 配置 Pages 入口，并通过服务绑定调用负责口令和静态资源的 Worker。更新工作台用 `npm run deploy`。修改 Pages 入口配置时用 `npm run deploy:pages`。 [Pages 服务绑定](https://developers.cloudflare.com/pages/functions/bindings/#service-bindings)
+`pages/` 配置 Pages 入口，并通过服务绑定调用负责口令和静态资源的 Worker。旧 Workers 首页跳转到 Pages。更新工作台用 `npm run deploy`。修改 Pages 入口配置时用 `npm run deploy:pages`。 [Pages 服务绑定](https://developers.cloudflare.com/pages/functions/bindings/#service-bindings)
 
 `npm run build` 生成 `dist/`。Worker 先校验口令会话，再提供工作页和静态资源。部署时需在 Cloudflare 配置 `WORKSPACE_PASSCODE` 与独立的 `WORKSPACE_SESSION_KEY`。后者使用至少 32 字符的随机值。首次部署可使用 Wrangler 的 `--secrets-file` 指定保存在 Git 之外的临时秘密配置文件。 [Workers Secrets](https://developers.cloudflare.com/workers/configuration/secrets/) · [静态资源路由](https://developers.cloudflare.com/workers/static-assets/routing/worker-script/)
 

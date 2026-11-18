@@ -11,6 +11,8 @@ import { labelClipPath } from './map/labelClip';
 import type { PlotScene } from './map/compose';
 import { browseParkFeatures, parkLocation } from './map/parkFeatures';
 import type { ParkFeature } from './map/parkFeatures';
+import { measurePointLabels, paintPointLabels, placePointLabels, preparePointLabelFonts, withinLabelRect } from './map/pointLabels';
+import type { PlacedPointLabel } from './map/pointLabels';
 
 interface Props {
   scene: PlotScene;
@@ -19,6 +21,7 @@ interface Props {
   notice?: string;
   status: string;
   example: boolean;
+  sidebarCollapsed: boolean;
   onFailure: () => void;
 }
 
@@ -46,7 +49,7 @@ function mapOffset(map: GLMap): [number, number] {
   return [left / 2, top / 2];
 }
 
-export function MapCanvas({ scene, bounds, layers, notice, status, example, onFailure }: Props) {
+export function MapCanvas({ scene, bounds, layers, notice, status, example, sidebarCollapsed, onFailure }: Props) {
   const { style } = scene;
   const parks = useMemo(() => browseParkFeatures(layers), [layers]);
   const currentParks = useRef(parks.bySource);
@@ -57,6 +60,8 @@ export function MapCanvas({ scene, bounds, layers, notice, status, example, onFa
   const popupAnchor = selectedPark && selection?.anchor;
   const labelsContainer = useRef<HTMLDivElement>(null);
   const foregroundContainer = useRef<HTMLDivElement>(null);
+  const labelCanvas = useRef<HTMLCanvasElement>(null);
+  const drawnPointLabels = useRef<PlacedPointLabel[]>([]);
   const currentScene = useRef(scene);
   currentScene.current = scene;
   const mountedPasses = useRef<{
@@ -153,6 +158,11 @@ export function MapCanvas({ scene, bounds, layers, notice, status, example, onFa
 
     function hitPark({ point: { x, y } }: MapMouseEvent) {
       const lookup = currentParks.current;
+      const text = drawnPointLabels.current.find(label => withinLabelRect({ x, y }, label.box));
+      if (text) {
+        const record = lookup.get(text.mark.source)?.[text.mark.index];
+        if (record) return { record, anchor: text.mark.coordinate };
+      }
       const { foreground, style } = currentScene.current;
       const pointBox: [[number, number], [number, number]] = [[x - 4, y - 4], [x + 4, y + 4]];
       const fg = mountedPasses.current?.foreground;
@@ -164,11 +174,11 @@ export function MapCanvas({ scene, bounds, layers, notice, status, example, onFa
         if (!ids.length) continue;
         for (const hit of pass.map.queryRenderedFeatures(pointBox, { layers: ids })) {
           const record = lookup.get(hit.source)?.[Number(hit.id)];
-          if (record?.geometry.type === 'Point' || record?.geometry.type === 'MultiPoint') return record;
+          if (record?.geometry.type === 'Point' || record?.geometry.type === 'MultiPoint') return { record };
           first ??= record;
         }
       }
-      return first;
+      return first ? { record: first } : undefined;
     }
 
     const onMove = () => setZoom(map.getZoom());
@@ -180,9 +190,10 @@ export function MapCanvas({ scene, bounds, layers, notice, status, example, onFa
       map.getCanvas().style.cursor = hitPark(event) ? 'pointer' : '';
     };
     const onClick = (event: MapMouseEvent) => {
-      const record = hitPark(event);
-      if (!record) return setSelection(undefined);
-      const anchor = record.geometry.type === 'Point' ? parkLocation(record.geometry)?.anchor : event.lngLat.toArray();
+      const hit = hitPark(event);
+      if (!hit) return setSelection(undefined);
+      const { record } = hit;
+      const anchor = hit.anchor ?? (record.geometry.type === 'Point' ? parkLocation(record.geometry)?.anchor : event.lngLat.toArray());
       setSelection({ source: record.source, index: record.index, anchor: record.pending ? undefined : anchor });
     };
     map.on('moveend', onMove);
@@ -213,6 +224,51 @@ export function MapCanvas({ scene, bounds, layers, notice, status, example, onFa
   useEffect(() => {
     if (liveMap.current) fit(liveMap.current, bounds);
   }, [bounds]);
+
+  const hasPointLabels = scene.points.some(mark => mark.label);
+  useEffect(() => {
+    const map = liveMap.current;
+    const canvas = labelCanvas.current;
+    const context = canvas?.getContext('2d');
+    drawnPointLabels.current = [];
+    if (!map || !canvas || !context) return;
+    let measured = measurePointLabels(context, scene.points);
+    let frame = 0;
+    let active = true;
+
+    const redraw = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const width = canvas.clientWidth, height = canvas.clientHeight;
+        const scale = Math.min(window.devicePixelRatio || 1, 2);
+        const pixelsWide = Math.round(width * scale), pixelsHigh = Math.round(height * scale);
+        if (canvas.width !== pixelsWide) canvas.width = pixelsWide;
+        if (canvas.height !== pixelsHigh) canvas.height = pixelsHigh;
+        context.setTransform(scale, 0, 0, scale, 0, 0);
+        context.clearRect(0, 0, width, height);
+        const { left, top } = mapInsets(map);
+        const view = { left: left + 4, top: top + 49, right: width - 4, bottom: height - 5 };
+        drawnPointLabels.current = placePointLabels(measured, point => map.project(point), view);
+        paintPointLabels(context, drawnPointLabels.current);
+      });
+    };
+
+    redraw();
+    map.on('move', redraw);
+    map.on('resize', redraw);
+    void preparePointLabelFonts(scene.points).then(() => {
+      if (!active) return;
+      measured = measurePointLabels(context, scene.points);
+      redraw();
+    }).catch(() => {});
+    return () => {
+      active = false;
+      cancelAnimationFrame(frame);
+      map.off('move', redraw);
+      map.off('resize', redraw);
+    };
+  }, [scene.points, sidebarCollapsed]);
 
   useEffect(() => {
     const map = liveMap.current;
@@ -295,6 +351,7 @@ export function MapCanvas({ scene, bounds, layers, notice, status, example, onFa
     <div ref={container} className="map-canvas" aria-label="可平移缩放的地图" />
     {hasClip && <div ref={labelsContainer} className="map-canvas map-overlay-pass clipped-annotation-pass" aria-hidden="true" />}
     {hasForeground && <div ref={foregroundContainer} className="map-canvas map-overlay-pass" aria-hidden="true" />}
+    {hasPointLabels && <canvas ref={labelCanvas} className="map-canvas point-annotations" aria-hidden="true" />}
     <div className="map-heading">
       <ParkSearch entries={parks.searchable} onSelect={selectPark} />
       {example && <span className="sample-chip">示例图层</span>}

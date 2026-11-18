@@ -4,6 +4,10 @@
   "compatibility_date": "2026-11-18",
   "workers_dev": true,
   "preview_urls": false,
+  "vars": {
+    "WORKSPACE_LEGACY_HOST": "cy-industrial-parks-mapping.hemayou.workers.dev",
+    "WORKSPACE_PUBLIC_HOST": "cy-industrial-parks-mapping.pages.dev"
+  },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",

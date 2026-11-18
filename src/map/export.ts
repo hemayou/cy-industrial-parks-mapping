@@ -6,6 +6,8 @@ import { writeDpi } from './dpi';
 import { installMarkers } from './markers';
 import type { PlotScene } from './compose';
 import { labelClipPath } from './labelClip';
+import { measurePointLabels, paintPointLabels, placePointLabels, preparePointLabelFonts } from './pointLabels';
+import type { PlacedPointLabel } from './pointLabels';
 import { paintSheet, planSheet, prepareSheetFonts, renderSheetFrames } from './sheet';
 
 export interface ExportJob {
@@ -67,7 +69,7 @@ export async function renderSheet(job: ExportJob, preview = false) {
   if (Math.min(logicalWidth, logicalHeight) < 240) {
     throw new Error('按当前 DPI 计算的成图版面过小，请增加像素或降低 DPI。');
   }
-  await prepareSheetFonts(layout, layers, attribution);
+  await Promise.all([prepareSheetFonts(layout, layers, attribution), preparePointLabelFonts(scene.points)]);
 
   const canvas = document.createElement('canvas');
   const scale = preview ? Math.min(dpiScale, 2400 / Math.max(logicalWidth, logicalHeight)) : dpiScale;
@@ -84,6 +86,8 @@ export async function renderSheet(job: ExportJob, preview = false) {
   let map: GLMap | undefined;
   try {
     let camera: JumpToOptions | undefined;
+    let pointLabels: PlacedPointLabel[] = [];
+    const viewWidth = container.clientWidth, viewHeight = container.clientHeight;
     const start = async (style: StyleSpecification, pixelRatio: number) => {
       try {
         map = new GLMap({
@@ -122,10 +126,14 @@ export async function renderSheet(job: ExportJob, preview = false) {
           center: drawing.getCenter(), zoom: drawing.getZoom(), bearing: drawing.getBearing(),
           pitch: drawing.getPitch(), padding: drawing.getPadding(),
         };
+        if (scene.points.some(mark => mark.label)) {
+          const measured = measurePointLabels(context, scene.points);
+          pointLabels = placePointLabels(measured, point => drawing.project(point),
+            { left: 4, top: 4, right: viewWidth - 4, bottom: viewHeight - 4 });
+        }
       }
 
       const rendered = drawing.getCanvas();
-      const viewWidth = container.clientWidth, viewHeight = container.clientHeight;
       reduced ||= rendered.width + 3 < viewWidth * scale || rendered.height + 3 < viewHeight * scale;
       context.save();
       context.translate(plan.map.x, plan.map.y);
@@ -143,6 +151,13 @@ export async function renderSheet(job: ExportJob, preview = false) {
     await drawPass(scene.style);
     if (scene.annotations) await drawPass(scene.annotations.style, scene.annotations);
     if (scene.foreground) await drawPass(scene.foreground);
+    if (pointLabels.length) {
+      context.save();
+      context.translate(plan.map.x, plan.map.y);
+      context.scale(plan.map.width / viewWidth, plan.map.height / viewHeight);
+      paintPointLabels(context, pointLabels);
+      context.restore();
+    }
     paintSheet(context, logicalWidth, logicalHeight, plan, layout, preview);
     const frames = preview ? await renderSheetFrames(logicalWidth, logicalHeight, scale, plan, layout) : [];
     const format = preview ? 'png' : output.type;
