@@ -23,7 +23,7 @@ Vite 默认监听本机 5173 端口。工作台打开时载入开放预览底图
 
 | 来源 | 可用底图 |
 | --- | --- |
-| Esri | Light Gray、Dark Gray、Streets |
+| Esri | Light Gray、Dark Gray、Streets、Topo（含地形晕渲） |
 | CARTO | Positron、Dark Matter、Voyager |
 | OpenFreeMap | 浅色与深色开放预览 |
 | 天地图 | 矢量底图与中文注记，由官方 WMTS 提供图像切片 |

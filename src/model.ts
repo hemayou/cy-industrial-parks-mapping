@@ -7,7 +7,7 @@ export type Shape = 'circle' | 'square' | 'diamond' | 'triangle';
 export type Corner = 'tl' | 'tr' | 'bl' | 'br';
 export type LineStyle = 'solid' | 'dashed' | 'dotted';
 export type PointLabelPlacement = 'auto' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw';
-export type BasemapId = 'open-light' | 'open-dark' | 'esri-light' | 'esri-dark' | 'esri-streets' | 'carto-light' | 'carto-dark' | 'carto-voyager' | 'tianditu-vector';
+export type BasemapId = 'open-light' | 'open-dark' | 'esri-light' | 'esri-dark' | 'esri-streets' | 'esri-topo' | 'carto-light' | 'carto-dark' | 'carto-voyager' | 'tianditu-vector';
 export type BasemapGroup = 'roads' | 'water' | 'green' | 'buildings' | 'boundaries' | 'transport' | 'places' | 'shops' | 'other';
 
 export interface TextStyle {

@@ -58,7 +58,7 @@ export function BasemapPanel(props: Props) {
                   onSelect(entry);
                   if (provider !== 'open' && !keys[provider]) setCredentials(true);
                 }}>
-                <span aria-hidden className={`base-sample ${entry.dark ? 'dark' : ''} ${/streets|voyager/.test(entry.slug) ? 'rich' : ''}`}>
+                <span aria-hidden className={`base-sample ${entry.dark ? 'dark' : ''} ${/streets|voyager|topographic/.test(entry.slug) ? 'rich' : ''}`}>
                   <i /><b /><em />
                 </span>
                 <span>{entry.name}{entry.provider === 'tianditu' ? ' · WMTS' : ''}</span>

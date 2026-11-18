@@ -15,6 +15,7 @@ export const BASEMAPS: CatalogStyle[] = [
   { id: 'esri-light', name: '浅灰画布', theme: 'Light Gray', provider: 'esri', slug: 'light-gray', dark: false },
   { id: 'esri-dark', name: '深灰画布', theme: 'Dark Gray', provider: 'esri', slug: 'dark-gray', dark: true },
   { id: 'esri-streets', name: '街道地图', theme: 'Streets', provider: 'esri', slug: 'streets', dark: false },
+  { id: 'esri-topo', name: '地形图 · Topo', theme: 'Topographic', provider: 'esri', slug: 'topographic', dark: false },
   { id: 'carto-light', name: '浅色简图', theme: 'Positron', provider: 'carto', slug: 'positron', dark: false },
   { id: 'carto-dark', name: '深色简图', theme: 'Dark Matter', provider: 'carto', slug: 'dark-matter', dark: true },
   { id: 'carto-voyager', name: '彩色街道', theme: 'Voyager', provider: 'carto', slug: 'voyager', dark: false },
@@ -90,9 +91,9 @@ export async function fetchBasemap(entry: CatalogStyle, keys: ProviderKeys, sign
     throw new BasemapRequestError(`${providerName[entry.provider]} 底图连接失败。请核对网络、密钥权限及域名限制。`);
   }
   const output = style as StyleSpecification;
-  // Labels and fonts are replaced in the local style. Keep only vector tiles.
+  // Topographic uses image tiles for its shaded relief and vector tiles for labels.
   for (const [id, source] of Object.entries(output.sources)) {
-    if (source.type !== 'vector') {
+    if (source.type !== 'vector' && !(entry.id === 'esri-topo' && source.type === 'raster')) {
       delete output.sources[id];
       continue;
     }
@@ -102,6 +103,9 @@ export async function fetchBasemap(entry: CatalogStyle, keys: ProviderKeys, sign
       source.tiles = [addKey(service.href, url, entry, keys)];
       source.minzoom ??= 0;
       source.maxzoom ??= 16;
+      delete source.url;
+    } else if (source.type === 'raster' && source.tiles?.length) {
+      // The ArcGIS REST MapServer URL is not TileJSON. Its style already supplies XYZ URLs.
       delete source.url;
     } else if (source.url) {
       source.url = addKey(source.url, url, entry, keys);
